@@ -72,6 +72,12 @@ export default function WeeklyMenuScreen({ navigation }) {
     persistMenu(newMenu);
   };
 
+  const handleNumericInput = (day, index, field, value) => {
+    if (/^\d*$/.test(value)) {
+      handleChange(day, index, field, value);
+    }
+  };
+
   const handleAddSet = (day) => {
     const base = menu[day][0]?.type === '筋トレ'
       ? { type: '筋トレ', exercise: '', weight: '', reps: '', sets: '' }
@@ -104,9 +110,31 @@ export default function WeeklyMenuScreen({ navigation }) {
     return sorted;
   };
 
+  const isHalfWidthNumeric = (value) => /^\d+$/.test(value);
+
+  const validateSet = (set) => {
+    if (!set.exercise.trim()) return false;
+    if (!isHalfWidthNumeric(set.sets)) return false;
+    if (set.type === '筋トレ') {
+      if (!isHalfWidthNumeric(set.weight)) return false;
+      if (!isHalfWidthNumeric(set.reps)) return false;
+    } else {
+      if (!isHalfWidthNumeric(set.distance)) return false;
+      if (!isHalfWidthNumeric(set.time)) return false;
+    }
+    return true;
+  };
+
   const handleSubmitDay = async (day) => {
     const today = new Date().toISOString().slice(0, 10);
-    const sets = menu[day];
+    const sets = menu[day] ?? [];
+
+    for (const set of sets) {
+      if (!validateSet(set)) {
+        Alert.alert('入力エラー', `${day} のメニューに未入力または無効な項目があります（半角数字のみ）`);
+        return;
+      }
+    }
 
     try {
       for (const set of sets) {
@@ -143,14 +171,14 @@ export default function WeeklyMenuScreen({ navigation }) {
                   <TextInput
                     placeholder="重さ(kg)"
                     value={set.weight}
-                    onChangeText={(v) => handleChange(day, idx, 'weight', v)}
+                    onChangeText={(v) => handleNumericInput(day, idx, 'weight', v)}
                     style={styles.input}
                     keyboardType="numeric"
                   />
                   <TextInput
                     placeholder="回数"
                     value={set.reps}
-                    onChangeText={(v) => handleChange(day, idx, 'reps', v)}
+                    onChangeText={(v) => handleNumericInput(day, idx, 'reps', v)}
                     style={styles.input}
                     keyboardType="numeric"
                   />
@@ -160,14 +188,14 @@ export default function WeeklyMenuScreen({ navigation }) {
                   <TextInput
                     placeholder="距離(km)"
                     value={set.distance}
-                    onChangeText={(v) => handleChange(day, idx, 'distance', v)}
+                    onChangeText={(v) => handleNumericInput(day, idx, 'distance', v)}
                     style={styles.input}
                     keyboardType="numeric"
                   />
                   <TextInput
                     placeholder="時間(分)"
                     value={set.time}
-                    onChangeText={(v) => handleChange(day, idx, 'time', v)}
+                    onChangeText={(v) => handleNumericInput(day, idx, 'time', v)}
                     style={styles.input}
                     keyboardType="numeric"
                   />
@@ -176,7 +204,7 @@ export default function WeeklyMenuScreen({ navigation }) {
               <TextInput
                 placeholder="セット数"
                 value={set.sets}
-                onChangeText={(v) => handleChange(day, idx, 'sets', v)}
+                onChangeText={(v) => handleNumericInput(day, idx, 'sets', v)}
                 style={styles.input}
                 keyboardType="numeric"
               />

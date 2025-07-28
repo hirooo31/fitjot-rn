@@ -40,8 +40,27 @@ export default function AddRecordScreen() {
     setShowPicker(false);
   };
 
+  const isHalfWidthNumeric = (value) => /^\d+$/.test(value);
+
+  const isSetValid = (set) => {
+    if (!set.exercise.trim() || !isHalfWidthNumeric(set.sets)) return false;
+    if (set.type === '筋トレ') {
+      return isHalfWidthNumeric(set.weight) && isHalfWidthNumeric(set.reps);
+    } else {
+      return isHalfWidthNumeric(set.distance) && isHalfWidthNumeric(set.time);
+    }
+  };
+
   const submitWithDate = async (useToday) => {
     const finalDate = useToday ? dayjs().format('YYYY-MM-DD') : dayjs(tempDate).format('YYYY-MM-DD');
+
+    for (const set of sets) {
+      if (!isSetValid(set)) {
+        alert('すべての必須項目は半角数字で入力してください');
+        return;
+      }
+    }
+
     try {
       const newRecords = sets.map((set) => ({
         ...set,
@@ -79,6 +98,12 @@ export default function AddRecordScreen() {
     }
   };
 
+  const handleNumericInput = (v, index, field) => {
+    if (/^\d*$/.test(v)) {
+      handleChange(index, field, v);
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>トレーニング記録</Text>
@@ -98,7 +123,7 @@ export default function AddRecordScreen() {
               <TextInput
                 placeholder="重さ(kg)"
                 value={set.weight}
-                onChangeText={(v) => handleChange(index, 'weight', v)}
+                onChangeText={(v) => handleNumericInput(v, index, 'weight')}
                 style={styles.input}
                 keyboardType="numeric"
                 returnKeyType="done"
@@ -106,7 +131,7 @@ export default function AddRecordScreen() {
               <TextInput
                 placeholder="回数"
                 value={set.reps}
-                onChangeText={(v) => handleChange(index, 'reps', v)}
+                onChangeText={(v) => handleNumericInput(v, index, 'reps')}
                 style={styles.input}
                 keyboardType="numeric"
                 returnKeyType="done"
@@ -117,7 +142,7 @@ export default function AddRecordScreen() {
               <TextInput
                 placeholder="距離(km)"
                 value={set.distance}
-                onChangeText={(v) => handleChange(index, 'distance', v)}
+                onChangeText={(v) => handleNumericInput(v, index, 'distance')}
                 style={styles.input}
                 keyboardType="numeric"
                 returnKeyType="done"
@@ -125,7 +150,7 @@ export default function AddRecordScreen() {
               <TextInput
                 placeholder="時間(分)"
                 value={set.time}
-                onChangeText={(v) => handleChange(index, 'time', v)}
+                onChangeText={(v) => handleNumericInput(v, index, 'time')}
                 style={styles.input}
                 keyboardType="numeric"
                 returnKeyType="done"
@@ -135,7 +160,7 @@ export default function AddRecordScreen() {
           <TextInput
             placeholder="セット数"
             value={set.sets}
-            onChangeText={(v) => handleChange(index, 'sets', v)}
+            onChangeText={(v) => handleNumericInput(v, index, 'sets')}
             style={styles.input}
             keyboardType="numeric"
             returnKeyType="done"

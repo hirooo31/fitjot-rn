@@ -77,6 +77,12 @@ export default function TimerScreen() {
     setRemaining(seconds);
   };
 
+  const handleCustomTimeInput = (v) => {
+    if (/^\d*$/.test(v)) {
+      setCustomTime(v);
+    }
+  };
+
   const handleCustomTimeSet = () => {
     const sec = parseInt(customTime, 10);
     if (!isNaN(sec) && sec > 0) {
@@ -147,7 +153,7 @@ export default function TimerScreen() {
         <TextInput
           placeholder="カスタム秒数"
           value={customTime}
-          onChangeText={setCustomTime}
+          onChangeText={handleCustomTimeInput}
           keyboardType="numeric"
           style={styles.input}
           returnKeyType="done"
