@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View, Text, TextInput, Button, ScrollView,
-  TouchableOpacity, Alert, StyleSheet
+  TouchableOpacity, Alert, StyleSheet, Modal
 } from 'react-native';
 import { getWeeklyMenu, saveWeeklyMenu, saveRecord } from '../utils/storage';
 
@@ -9,17 +9,19 @@ const weekdays = ['月曜日', '火曜日', '水曜日', '木曜日', '金曜日
 
 export default function WeeklyMenuScreen({ navigation }) {
   const [menu, setMenu] = useState({});
-  const [showDaySelector, setShowDaySelector] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [typeModalVisible, setTypeModalVisible] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(null);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={() => setShowDaySelector(!showDaySelector)} style={{ marginRight: 15 }}>
+        <TouchableOpacity onPress={() => setModalVisible(true)} style={{ marginRight: 15 }}>
           <Text style={{ fontSize: 24 }}>＋</Text>
         </TouchableOpacity>
       ),
     });
-  }, [navigation, showDaySelector]);
+  }, [navigation]);
 
   useEffect(() => {
     (async () => {
@@ -33,14 +35,24 @@ export default function WeeklyMenuScreen({ navigation }) {
     saveWeeklyMenu(newMenu);
   };
 
-  const handleAddDay = (day) => {
+  const handleDaySelect = (day) => {
     if (menu[day]) {
       Alert.alert('エラー', `${day} はすでに存在します`);
       return;
     }
-    const newMenu = { ...menu, [day]: [{ exercise: '', weight: '', reps: '', sets: '' }] };
+    setSelectedDay(day);
+    setTypeModalVisible(true);
+    setModalVisible(false);
+  };
+
+  const handleAddType = (type) => {
+    const newSet = type === '筋トレ'
+      ? [{ type, exercise: '', weight: '', reps: '', sets: '' }]
+      : [{ type, exercise: '', distance: '', time: '', sets: '' }];
+    const newMenu = { ...menu, [selectedDay]: newSet };
     persistMenu(sortMenu(newMenu));
-    setShowDaySelector(false);
+    setTypeModalVisible(false);
+    setSelectedDay(null);
   };
 
   const handleChange = (day, index, field, value) => {
@@ -51,7 +63,10 @@ export default function WeeklyMenuScreen({ navigation }) {
   };
 
   const handleAddSet = (day) => {
-    const updatedDay = [...menu[day], { exercise: '', weight: '', reps: '', sets: '' }];
+    const base = menu[day][0]?.type === '筋トレ'
+      ? { type: '筋トレ', exercise: '', weight: '', reps: '', sets: '' }
+      : { type: '有酸素', exercise: '', distance: '', time: '', sets: '' };
+    const updatedDay = [...menu[day], base];
     const newMenu = { ...menu, [day]: updatedDay };
     persistMenu(newMenu);
   };
@@ -92,14 +107,6 @@ export default function WeeklyMenuScreen({ navigation }) {
 
   return (
     <ScrollView style={{ padding: 20 }}>
-      {showDaySelector &&
-        weekdays.map((day) => (
-          <TouchableOpacity key={day} onPress={() => handleAddDay(day)} style={styles.dayButton}>
-            <Text>{day}</Text>
-          </TouchableOpacity>
-        ))
-      }
-
       {Object.entries(menu).map(([day, sets]) => (
         <View key={day} style={styles.card}>
           <View style={styles.cardHeader}>
@@ -110,26 +117,48 @@ export default function WeeklyMenuScreen({ navigation }) {
           </View>
           {sets.map((set, idx) => (
             <View key={idx} style={styles.setBlock}>
+              <Text style={{ fontWeight: 'bold' }}>{set.type}</Text>
               <TextInput
                 placeholder="種目"
                 value={set.exercise}
                 onChangeText={(v) => handleChange(day, idx, 'exercise', v)}
                 style={styles.input}
               />
-              <TextInput
-                placeholder="重さ(kg)"
-                value={set.weight}
-                onChangeText={(v) => handleChange(day, idx, 'weight', v)}
-                style={styles.input}
-                keyboardType="numeric"
-              />
-              <TextInput
-                placeholder="回数"
-                value={set.reps}
-                onChangeText={(v) => handleChange(day, idx, 'reps', v)}
-                style={styles.input}
-                keyboardType="numeric"
-              />
+              {set.type === '筋トレ' ? (
+                <>
+                  <TextInput
+                    placeholder="重さ(kg)"
+                    value={set.weight}
+                    onChangeText={(v) => handleChange(day, idx, 'weight', v)}
+                    style={styles.input}
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    placeholder="回数"
+                    value={set.reps}
+                    onChangeText={(v) => handleChange(day, idx, 'reps', v)}
+                    style={styles.input}
+                    keyboardType="numeric"
+                  />
+                </>
+              ) : (
+                <>
+                  <TextInput
+                    placeholder="距離(km)"
+                    value={set.distance}
+                    onChangeText={(v) => handleChange(day, idx, 'distance', v)}
+                    style={styles.input}
+                    keyboardType="numeric"
+                  />
+                  <TextInput
+                    placeholder="時間(分)"
+                    value={set.time}
+                    onChangeText={(v) => handleChange(day, idx, 'time', v)}
+                    style={styles.input}
+                    keyboardType="numeric"
+                  />
+                </>
+              )}
               <TextInput
                 placeholder="セット数"
                 value={set.sets}
@@ -146,18 +175,44 @@ export default function WeeklyMenuScreen({ navigation }) {
           <Button title="記録送信" onPress={() => handleSubmitDay(day)} />
         </View>
       ))}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <Text style={styles.cardTitle}>曜日を選択</Text>
+            {weekdays.map(day => (
+              <Button key={day} title={day} onPress={() => handleDaySelect(day)} />
+            ))}
+            <Button title="キャンセル" onPress={() => setModalVisible(false)} />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={typeModalVisible}
+        onRequestClose={() => setTypeModalVisible(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <Text style={styles.cardTitle}>種別を選択</Text>
+            <Button title="筋トレ" onPress={() => handleAddType('筋トレ')} />
+            <Button title="有酸素" onPress={() => handleAddType('有酸素')} />
+            <Button title="キャンセル" onPress={() => setTypeModalVisible(false)} />
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  dayButton: {
-    padding: 10,
-    backgroundColor: '#eee',
-    marginVertical: 5,
-    borderRadius: 5,
-    alignItems: 'center',
-  },
   card: {
     padding: 15,
     marginBottom: 20,
@@ -188,4 +243,17 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 5,
   },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalContent: {
+    width: '80%',
+    padding: 20,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    gap: 10
+  }
 });

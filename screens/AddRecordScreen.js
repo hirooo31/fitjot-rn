@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, Button, ScrollView,
-  TouchableOpacity, StyleSheet, Keyboard, Platform
+  TouchableOpacity, StyleSheet, Keyboard, Platform, Modal
 } from 'react-native';
 import { saveRecord, getRecords } from '../utils/storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 
 export default function AddRecordScreen() {
-  const [sets, setSets] = useState([{ exercise: '', weight: '', reps: '', sets: '' }]);
+  const [sets, setSets] = useState([]);
   const [date, setDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [showDateOption, setShowDateOption] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
+  const [modalVisible, setModalVisible] = useState(false);
 
   const handleChange = (index, field, value) => {
     const updated = [...sets];
@@ -20,8 +21,12 @@ export default function AddRecordScreen() {
     setSets(updated);
   };
 
-  const handleAddSet = () => {
-    setSets([...sets, { exercise: '', weight: '', reps: '', sets: '' }]);
+  const handleAddSet = (type) => {
+    const newSet = type === '筋トレ'
+      ? { type, exercise: '', weight: '', reps: '', sets: '' }
+      : { type, exercise: '', distance: '', time: '', sets: '' };
+    setSets([...sets, newSet]);
+    setModalVisible(false);
   };
 
   const handleRemoveSet = (index) => {
@@ -45,7 +50,7 @@ export default function AddRecordScreen() {
       await saveRecord(record);
     }
     alert('記録を保存しました');
-    setSets([{ exercise: '', weight: '', reps: '', sets: '' }]);
+    setSets([]);
     Keyboard.dismiss();
     setShowDateOption(false);
     setShowPicker(false);
@@ -69,6 +74,7 @@ export default function AddRecordScreen() {
 
       {sets.map((set, index) => (
         <View key={index} style={styles.setBlock}>
+          <Text style={styles.setType}>{set.type}</Text>
           <TextInput
             placeholder="種目"
             value={set.exercise}
@@ -76,22 +82,45 @@ export default function AddRecordScreen() {
             style={styles.input}
             returnKeyType="done"
           />
-          <TextInput
-            placeholder="重さ(kg)"
-            value={set.weight}
-            onChangeText={(v) => handleChange(index, 'weight', v)}
-            style={styles.input}
-            keyboardType="numeric"
-            returnKeyType="done"
-          />
-          <TextInput
-            placeholder="回数"
-            value={set.reps}
-            onChangeText={(v) => handleChange(index, 'reps', v)}
-            style={styles.input}
-            keyboardType="numeric"
-            returnKeyType="done"
-          />
+          {set.type === '筋トレ' ? (
+            <>
+              <TextInput
+                placeholder="重さ(kg)"
+                value={set.weight}
+                onChangeText={(v) => handleChange(index, 'weight', v)}
+                style={styles.input}
+                keyboardType="numeric"
+                returnKeyType="done"
+              />
+              <TextInput
+                placeholder="回数"
+                value={set.reps}
+                onChangeText={(v) => handleChange(index, 'reps', v)}
+                style={styles.input}
+                keyboardType="numeric"
+                returnKeyType="done"
+              />
+            </>
+          ) : (
+            <>
+              <TextInput
+                placeholder="距離(km)"
+                value={set.distance}
+                onChangeText={(v) => handleChange(index, 'distance', v)}
+                style={styles.input}
+                keyboardType="numeric"
+                returnKeyType="done"
+              />
+              <TextInput
+                placeholder="時間(分)"
+                value={set.time}
+                onChangeText={(v) => handleChange(index, 'time', v)}
+                style={styles.input}
+                keyboardType="numeric"
+                returnKeyType="done"
+              />
+            </>
+          )}
           <TextInput
             placeholder="セット数"
             value={set.sets}
@@ -100,7 +129,7 @@ export default function AddRecordScreen() {
             keyboardType="numeric"
             returnKeyType="done"
           />
-          {sets.length > 1 && (
+          {sets.length > 0 && (
             <TouchableOpacity onPress={() => handleRemoveSet(index)}>
               <Text style={styles.delete}>✕</Text>
             </TouchableOpacity>
@@ -108,7 +137,7 @@ export default function AddRecordScreen() {
         </View>
       ))}
 
-      <Button title="追加" onPress={handleAddSet} />
+      <Button title="追加" onPress={() => setModalVisible(true)} />
       <View style={styles.buttonRow}>
         <Button title="保存" onPress={handleSave} />
         <Button title="Submit" onPress={handleSubmit} />
@@ -142,6 +171,22 @@ export default function AddRecordScreen() {
           <Button title="この日付で記録" onPress={() => submitWithDate(false)} />
         </View>
       )}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <Text style={styles.title}>記録タイプを選択</Text>
+            <Button title="筋トレ" onPress={() => handleAddSet('筋トレ')} />
+            <Button title="有酸素" onPress={() => handleAddSet('有酸素')} />
+            <Button title="キャンセル" onPress={() => setModalVisible(false)} />
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -162,6 +207,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderColor: '#ccc',
     backgroundColor: '#fafafa'
+  },
+  setType: {
+    fontWeight: 'bold',
+    marginBottom: 5
   },
   input: {
     borderWidth: 1,
@@ -207,5 +256,18 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#f0f0f0',
     borderRadius: 8
+  },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalContent: {
+    width: '80%',
+    padding: 20,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    gap: 10
   }
 });
