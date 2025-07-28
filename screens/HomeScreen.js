@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, Modal, TextInput, Button, Platform
+  TouchableOpacity, Modal, TextInput, Button, Platform, Alert
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { getRecords } from '../utils/storage';
@@ -24,22 +24,32 @@ export default function HomeScreen() {
   );
 
   const loadRecords = async () => {
-    const records = await getRecords();
-    const grouped = {};
-    records.forEach(r => {
-      const date = r.date;
-      if (!grouped[date]) grouped[date] = [];
-      grouped[date].push(r);
-    });
-    setGroupedRecords(grouped);
+    try {
+      const records = await getRecords();
+      const grouped = {};
+      records.forEach(r => {
+        const date = r.date;
+        if (!grouped[date]) grouped[date] = [];
+        grouped[date].push(r);
+      });
+      setGroupedRecords(grouped);
+    } catch (error) {
+      Alert.alert('エラー', '記録の読み込みに失敗しました');
+      console.error('loadRecords error:', error);
+    }
   };
 
   const handleDelete = async (date, index) => {
-    const allRecords = await getRecords();
-    const target = JSON.stringify(groupedRecords[date][index]);
-    const updated = allRecords.filter(r => JSON.stringify(r) !== target);
-    await AsyncStorage.setItem('trainingRecords', JSON.stringify(updated));
-    loadRecords();
+    try {
+      const allRecords = await getRecords();
+      const target = JSON.stringify(groupedRecords[date][index]);
+      const updated = allRecords.filter(r => JSON.stringify(r) !== target);
+      await AsyncStorage.setItem('trainingRecords', JSON.stringify(updated));
+      loadRecords();
+    } catch (error) {
+      Alert.alert('エラー', '削除に失敗しました');
+      console.error('handleDelete error:', error);
+    }
   };
 
   const openEditModal = (date, index) => {
@@ -51,17 +61,22 @@ export default function HomeScreen() {
   };
 
   const handleSaveEdit = async () => {
-    const allRecords = await getRecords();
-    const target = JSON.stringify(groupedRecords[editDate][editIndex]);
-    const updated = allRecords.map(r => {
-      if (JSON.stringify(r) === target) {
-        return editRecord;
-      }
-      return r;
-    });
-    await AsyncStorage.setItem('trainingRecords', JSON.stringify(updated));
-    setEditModalVisible(false);
-    loadRecords();
+    try {
+      const allRecords = await getRecords();
+      const target = JSON.stringify(groupedRecords[editDate][editIndex]);
+      const updated = allRecords.map(r => {
+        if (JSON.stringify(r) === target) {
+          return editRecord;
+        }
+        return r;
+      });
+      await AsyncStorage.setItem('trainingRecords', JSON.stringify(updated));
+      setEditModalVisible(false);
+      loadRecords();
+    } catch (error) {
+      Alert.alert('エラー', '編集の保存に失敗しました');
+      console.error('handleSaveEdit error:', error);
+    }
   };
 
   const onDateChange = (event, selectedDate) => {

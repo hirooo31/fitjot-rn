@@ -24,13 +24,23 @@ export default function TimerScreen() {
   }, []);
 
   const loadPresets = async () => {
-    const stored = await AsyncStorage.getItem('timer_presets');
-    if (stored) setPresets(JSON.parse(stored));
-    else setPresets([30, 60, 90, 120]);
+    try {
+      const stored = await AsyncStorage.getItem('timer_presets');
+      if (stored) setPresets(JSON.parse(stored));
+      else setPresets([30, 60, 90, 120]);
+    } catch (error) {
+      console.error('プリセットの読み込みに失敗しました:', error);
+      Alert.alert('エラー', 'プリセットの読み込みに失敗しました');
+    }
   };
 
   const savePresets = async (newPresets) => {
-    await AsyncStorage.setItem('timer_presets', JSON.stringify(newPresets));
+    try {
+      await AsyncStorage.setItem('timer_presets', JSON.stringify(newPresets));
+    } catch (error) {
+      console.error('プリセットの保存に失敗しました:', error);
+      Alert.alert('エラー', 'プリセットの保存に失敗しました');
+    }
   };
 
   useEffect(() => {
@@ -73,6 +83,8 @@ export default function TimerScreen() {
       handleChangeTime(sec);
       setCustomTime('');
       Keyboard.dismiss();
+    } else {
+      Alert.alert('無効な秒数', '1秒以上の有効な数値を入力してください');
     }
   };
 
@@ -84,6 +96,10 @@ export default function TimerScreen() {
       await savePresets(updated);
       setCustomTime('');
       Keyboard.dismiss();
+    } else if (presets.includes(sec)) {
+      Alert.alert('すでに存在します', `${sec}秒はすでにプリセットに含まれています`);
+    } else {
+      Alert.alert('無効な秒数', '1秒以上の有効な数値を入力してください');
     }
   };
 

@@ -42,24 +42,35 @@ export default function AddRecordScreen() {
 
   const submitWithDate = async (useToday) => {
     const finalDate = useToday ? dayjs().format('YYYY-MM-DD') : dayjs(tempDate).format('YYYY-MM-DD');
-    const newRecords = sets.map((set) => ({
-      ...set,
-      date: finalDate,
-    }));
-    for (const record of newRecords) {
-      await saveRecord(record);
+    try {
+      const newRecords = sets.map((set) => ({
+        ...set,
+        date: finalDate,
+      }));
+      for (const record of newRecords) {
+        await saveRecord(record);
+      }
+      alert('記録を保存しました');
+      setSets([]);
+      Keyboard.dismiss();
+    } catch (error) {
+      console.error('記録保存に失敗しました:', error);
+      alert('記録の保存に失敗しました');
+    } finally {
+      setShowDateOption(false);
+      setShowPicker(false);
     }
-    alert('記録を保存しました');
-    setSets([]);
-    Keyboard.dismiss();
-    setShowDateOption(false);
-    setShowPicker(false);
   };
 
   const handleSave = async () => {
-    const saved = await getRecords();
-    console.log('現在の記録:', saved);
-    alert('一時保存しました（Submitしないと一覧には表示されません）');
+    try {
+      const saved = await getRecords();
+      console.log('現在の記録:', saved);
+      alert('一時保存しました（Submitしないと一覧には表示されません）');
+    } catch (error) {
+      console.error('一時保存に失敗しました:', error);
+      alert('一時保存に失敗しました');
+    }
   };
 
   const onChangeDate = (event, selectedDate) => {

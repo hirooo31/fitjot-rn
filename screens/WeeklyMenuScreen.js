@@ -25,14 +25,24 @@ export default function WeeklyMenuScreen({ navigation }) {
 
   useEffect(() => {
     (async () => {
-      const data = await getWeeklyMenu();
-      if (data) setMenu(data);
+      try {
+        const data = await getWeeklyMenu();
+        if (data) setMenu(data);
+      } catch (error) {
+        console.error('メニュー取得エラー:', error);
+        Alert.alert('エラー', 'メニューの取得に失敗しました');
+      }
     })();
   }, []);
 
-  const persistMenu = (newMenu) => {
-    setMenu(newMenu);
-    saveWeeklyMenu(newMenu);
+  const persistMenu = async (newMenu) => {
+    try {
+      setMenu(newMenu);
+      await saveWeeklyMenu(newMenu);
+    } catch (error) {
+      console.error('メニュー保存エラー:', error);
+      Alert.alert('エラー', 'メニューの保存に失敗しました');
+    }
   };
 
   const handleDaySelect = (day) => {
@@ -98,11 +108,15 @@ export default function WeeklyMenuScreen({ navigation }) {
     const today = new Date().toISOString().slice(0, 10);
     const sets = menu[day];
 
-    for (const set of sets) {
-      await saveRecord({ ...set, day, date: today });
+    try {
+      for (const set of sets) {
+        await saveRecord({ ...set, day, date: today });
+      }
+      Alert.alert(`${day}のメニューを記録しました`);
+    } catch (error) {
+      console.error(`${day}の記録保存エラー:`, error);
+      Alert.alert('エラー', `${day}のメニュー記録に失敗しました`);
     }
-
-    Alert.alert(`${day}のメニューを記録しました`);
   };
 
   return (
