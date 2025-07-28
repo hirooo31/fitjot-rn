@@ -1,20 +1,34 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import HomeScreen from './screens/HomeScreen';
+import AddRecordScreen from './screens/AddRecordScreen';
+import WeeklyMenuScreen from './screens/WeeklyMenuScreen';
+import TimerScreen from './screens/TimerScreen';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+
+const Tab = createBottomTabNavigator();
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <NavigationContainer>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ color, size }) => {
+            let iconName;
+            if (route.name === '一覧') iconName = 'list';
+            else if (route.name === '記録') iconName = 'add-circle';
+            else if (route.name === 'メニュー') iconName = 'calendar';
+            else if (route.name === 'タイマー') iconName = 'timer';
+            return <Ionicons name={iconName} size={size} color={color} />;
+          },
+        })}
+      >
+        <Tab.Screen name="一覧" component={HomeScreen} />
+        <Tab.Screen name="記録" component={AddRecordScreen} />
+        <Tab.Screen name="メニュー" component={WeeklyMenuScreen} />
+        <Tab.Screen name="タイマー" component={TimerScreen} />
+      </Tab.Navigator>
+    </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
