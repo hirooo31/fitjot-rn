@@ -85,18 +85,18 @@ export default function TimerScreen() {
 
   const handleCustomTimeSet = () => {
     const sec = parseInt(customTime, 10);
-    if (!isNaN(sec) && sec > 0) {
+    if (!isNaN(sec) && sec > 0 && sec <= 600) {
       handleChangeTime(sec);
       setCustomTime('');
       Keyboard.dismiss();
     } else {
-      Alert.alert('無効な秒数', '1秒以上の有効な数値を入力してください');
+      Alert.alert('無効な秒数', '1〜600の数値を入力してください');
     }
   };
 
   const handleAddPreset = async () => {
     const sec = parseInt(customTime, 10);
-    if (!isNaN(sec) && sec > 0 && !presets.includes(sec)) {
+    if (!isNaN(sec) && sec > 0 && sec <= 600 && !presets.includes(sec)) {
       const updated = [...presets, sec].sort((a, b) => a - b);
       setPresets(updated);
       await savePresets(updated);
@@ -105,7 +105,7 @@ export default function TimerScreen() {
     } else if (presets.includes(sec)) {
       Alert.alert('すでに存在します', `${sec}秒はすでにプリセットに含まれています`);
     } else {
-      Alert.alert('無効な秒数', '1秒以上の有効な数値を入力してください');
+      Alert.alert('無効な秒数', '1〜600の数値を入力してください');
     }
   };
 
