@@ -1,3 +1,4 @@
+// App.js
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -6,10 +7,15 @@ import AddRecordScreen from './screens/AddRecordScreen';
 import WeeklyMenuScreen from './screens/WeeklyMenuScreen';
 import TimerScreen from './screens/TimerScreen';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { migrateFromAsyncStorage } from './utils/storage';
 
 const Tab = createBottomTabNavigator();
 
 export default function App() {
+  React.useEffect(() => {
+    migrateFromAsyncStorage();
+  }, []);
+
   return (
     <NavigationContainer>
       <Tab.Navigator

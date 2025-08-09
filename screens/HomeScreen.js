@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, Modal, TextInput, Button, Platform, Alert
+  TouchableOpacity, Modal, TextInput, Button, Alert
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { getRecords } from '../utils/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getRecords, updateRecordById, deleteRecordById } from '../utils/storage';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 
@@ -20,12 +19,12 @@ export default function HomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       loadRecords();
-    }, [])
+    }, [searchQuery])
   );
 
   const loadRecords = async () => {
     try {
-      const records = await getRecords();
+      const records = await getRecords({ search: searchQuery });
       const grouped = {};
       records.forEach(r => {
         const date = r.date;
@@ -33,22 +32,18 @@ export default function HomeScreen() {
         grouped[date].push(r);
       });
       setGroupedRecords(grouped);
-    } catch (error) {
+    } catch {
       Alert.alert('エラー', '記録の読み込みに失敗しました');
-      console.error('loadRecords error:', error);
     }
   };
 
   const handleDelete = async (date, index) => {
     try {
-      const allRecords = await getRecords();
-      const target = JSON.stringify(groupedRecords[date][index]);
-      const updated = allRecords.filter(r => JSON.stringify(r) !== target);
-      await AsyncStorage.setItem('trainingRecords', JSON.stringify(updated));
-      loadRecords();
-    } catch (error) {
+      const target = groupedRecords[date][index];
+      await deleteRecordById(target.id);
+      await loadRecords();
+    } catch {
       Alert.alert('エラー', '削除に失敗しました');
-      console.error('handleDelete error:', error);
     }
   };
 
@@ -62,20 +57,11 @@ export default function HomeScreen() {
 
   const handleSaveEdit = async () => {
     try {
-      const allRecords = await getRecords();
-      const target = JSON.stringify(groupedRecords[editDate][editIndex]);
-      const updated = allRecords.map(r => {
-        if (JSON.stringify(r) === target) {
-          return editRecord;
-        }
-        return r;
-      });
-      await AsyncStorage.setItem('trainingRecords', JSON.stringify(updated));
+      await updateRecordById(editRecord.id, editRecord);
       setEditModalVisible(false);
       loadRecords();
-    } catch (error) {
+    } catch {
       Alert.alert('エラー', '編集の保存に失敗しました');
-      console.error('handleSaveEdit error:', error);
     }
   };
 
@@ -85,17 +71,12 @@ export default function HomeScreen() {
     }
   };
 
-  const filteredEntries = Object.entries(groupedRecords)
-    .filter(([_, records]) => {
-      const query = searchQuery.toLowerCase();
-      return records.some(r =>
-        (r.exercise && r.exercise.toLowerCase().includes(query))
-      );
-    });
+  const clearSearch = () => setSearchQuery('');
 
-  const clearSearch = () => {
-    setSearchQuery('');
-  };
+  const filteredEntries = Object.entries(groupedRecords)
+    .filter(([_, records]) =>
+      records.some(r => (r.exercise || '').toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
   return (
     <ScrollView style={styles.container}>
@@ -118,7 +99,7 @@ export default function HomeScreen() {
         <View key={date} style={styles.recordGroup}>
           <Text style={styles.date}>{date}</Text>
           {items.map((r, i) => (
-            <View key={i} style={styles.recordItemRow}>
+            <View key={r.id ?? i} style={styles.recordItemRow}>
               <Text style={styles.recordItem}>
                 - {r.exercise} {r.weight ? `${r.weight}kg × ` : ''}{r.reps || ''}{r.reps ? '回' : ''}{r.sets ? ` × ${r.sets}セット` : ''}
               </Text>
@@ -138,7 +119,6 @@ export default function HomeScreen() {
       <Modal visible={editModalVisible} animationType="slide">
         <ScrollView contentContainerStyle={styles.modalContent}>
           <Text style={styles.modalTitle}>記録を編集</Text>
-
           <Text style={styles.label}>📅 日付を選択</Text>
           <DateTimePicker
             value={editRecord?.date ? new Date(editRecord.date) : new Date()}
@@ -147,7 +127,6 @@ export default function HomeScreen() {
             onChange={onDateChange}
             style={{ marginBottom: 20 }}
           />
-
           <TextInput
             placeholder="種目"
             value={editRecord?.exercise}
@@ -190,78 +169,20 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  searchBar: {
-    flex: 1,
-    borderWidth: 1,
-    padding: 10,
-    borderRadius: 5,
-  },
-  clearButton: {
-    marginLeft: 10,
-    paddingHorizontal: 10,
-  },
-  clearButtonText: {
-    fontSize: 18,
-    color: 'gray',
-  },
-  recordGroup: {
-    marginBottom: 20,
-  },
-  date: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  recordItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  recordItem: {
-    fontSize: 14,
-    marginLeft: 10,
-    flex: 1,
-  },
-  delete: {
-    color: 'red',
-    fontSize: 18,
-    marginLeft: 10,
-  },
-  edit: {
-    color: 'blue',
-    fontSize: 18,
-    marginRight: 10,
-  },
-  modalContent: {
-    padding: 20,
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  modalTitle: {
-    fontSize: 20,
-    marginBottom: 20,
-    fontWeight: 'bold',
-  },
-  input: {
-    borderWidth: 1,
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  label: {
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
+  container: { padding: 20 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  searchBar: { flex: 1, borderWidth: 1, padding: 10, borderRadius: 5 },
+  clearButton: { marginLeft: 10, paddingHorizontal: 10 },
+  clearButtonText: { fontSize: 18, color: 'gray' },
+  recordGroup: { marginBottom: 20 },
+  date: { fontWeight: 'bold', fontSize: 16, marginBottom: 5 },
+  recordItemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  recordItem: { fontSize: 14, marginLeft: 10, flex: 1 },
+  delete: { color: 'red', fontSize: 18, marginLeft: 10 },
+  edit: { color: 'blue', fontSize: 18, marginRight: 10 },
+  modalContent: { padding: 20, flexGrow: 1, justifyContent: 'center' },
+  modalTitle: { fontSize: 20, marginBottom: 20, fontWeight: 'bold' },
+  input: { borderWidth: 1, padding: 10, borderRadius: 5, marginBottom: 10 },
+  modalButtons: { flexDirection: 'row', justifyContent: 'space-between' },
+  label: { fontWeight: 'bold', marginBottom: 5 },
 });
