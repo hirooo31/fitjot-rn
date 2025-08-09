@@ -245,7 +245,7 @@ export default function WeeklyMenuScreen({ navigation }) {
                 <Text style={[styles.primaryBtnText, { color: C.text }]}>記録送信</Text>
               </Pressable>
 
-              {/* 削除：枠をナチュラルに（太すぎ→細く） */}
+              {/* 削除 */}
               <Pressable
                 onPress={() => handleRemoveDay(day)}
                 style={({ pressed }) => [
@@ -397,7 +397,7 @@ export default function WeeklyMenuScreen({ navigation }) {
         </View>
       ))}
 
-      {/* 曜日選択（大きめ）— アイコン削除、テキストのみ */}
+      {/* 曜日選択 */}
       <Modal visible={weekdayModal} transparent animationType="fade" onRequestClose={() => setWeekdayModal(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -432,10 +432,10 @@ export default function WeeklyMenuScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* 種別選択（共用）— タイトルはボールドにしない → ボールド（700）に修正済み */}
+      {/* 種別選択（共用） */}
       <Modal visible={typeModal} transparent animationType="fade" onRequestClose={() => setTypeModal(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border, alignItems: 'center' }]}>
+          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[styles.typeModalTitle, { color: C.text }]}>種別を選択</Text>
             <View style={styles.typeRow}>
               <Pressable
@@ -449,7 +449,7 @@ export default function WeeklyMenuScreen({ navigation }) {
                 ]}
               >
                 <Ionicons name="barbell-outline" size={42} color={C.accent} />
-                <Text style={[styles.typeBigText, { color: C.text }]}>筋トレ</Text>
+                <Text style={styles.typeBigText}>筋トレ</Text>
               </Pressable>
               <Pressable
                 onPress={() => confirmType('有酸素')}
@@ -462,17 +462,17 @@ export default function WeeklyMenuScreen({ navigation }) {
                 ]}
               >
                 <Ionicons name="walk-outline" size={42} color={C.accent} />
-                <Text style={[styles.typeBigText, { color: C.text }]}>有酸素</Text>
+                <Text style={styles.typeBigText}>有酸素</Text>
               </Pressable>
             </View>
             <Pressable
               onPress={() => setTypeModal(false)}
               style={({ pressed }) => [
                 styles.closeBtn,
-                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : '透明' },
+                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
               ]}
             >
-              <Text style={{ color: C.text, fontSize: 16, fontWeight: '600' }}>閉じる</Text>
+              <Text style={{ color: C.text, fontSize: 16 }}>閉じる</Text>
             </Pressable>
           </View>
         </View>
@@ -501,12 +501,11 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '800' },
 
-  actions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  actions: { flexDirection: 'row', alignItems: 'center' },
 
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: 14,
@@ -516,60 +515,61 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
+    marginLeft: 10,
   },
   primaryBtnText: {
     fontSize: 15,
-    fontWeight: '500', // ← 800 → 500 に変更
+    fontWeight: '500',
+    marginLeft: 8,
   },
 
-  // ★ 枠太すぎ → ナチュラルに（細め）
   ghostBtn: {
     alignItems: 'center',
-    gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: 14,
-    borderWidth: 0.8, // ★ 1 → 0.8 に
+    borderWidth: 0.8,
     minWidth: 104,
     justifyContent: 'center',
     flexDirection: 'row',
+    marginLeft: 10,
   },
   ghostBtnText: {
     fontSize: 15,
-    fontWeight: '500', // ← 800 → 500 に変更
+    fontWeight: '500',
+    marginLeft: 8,
   },
 
   addSetBtn: {
     marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     borderWidth: 1,
     paddingVertical: 12,
     borderRadius: 999,
     justifyContent: 'center',
   },
-  addSetText: { fontSize: 16, fontWeight: '700' },
+  addSetText: { fontSize: 16, fontWeight: '700', marginLeft: 6 },
 
   divider: { height: 1, marginVertical: 12 },
 
   setRow: { marginBottom: 12 },
   setHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
 
-  // ★ 小さすぎ → 少し大きく
-  setType: { fontSize: 14, fontWeight: '700' }, // ★ 16 → 14 に
+  setType: { fontSize: 14, fontWeight: '700' },
 
-  formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  field: { width: '48%' },
+  formGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  field: { width: '48%', marginRight: '4%', marginBottom: 12 },
+  // 最後の列は右余白を消す
+  // （簡易対応: 2列目は width: '48%' のままでも中央寄せの影響はない）
 
-  // ★ 小さすぎ → 少し大きく
-  label: { fontSize: 14, marginBottom: 6 }, // 12 -> 14
+  label: { fontSize: 14, marginBottom: 6 },
   input: {
     borderWidth: 1,
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 12,
-    fontSize: 17, // 15 -> 17
+    fontSize: 17,
   },
 
   // モーダル共通
@@ -583,29 +583,16 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: '900', textAlign: 'center', marginBottom: 18 },
 
-  // ★ 「種別を選択」はボールド
+  // 種別モーダル
   typeModalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 18 },
-
-  // 曜日：大きめ（アイコン削除済み）
-  weekGrid: {
+  typeRow: {
+    width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 14,
-    justifyContent: 'center', // ← 明示的に中央揃え
-    marginBottom: 18,
-  },
-  weekItem: {
-    width: '40%', // ← 端末でも中央寄せで2列に収まるよう調整
-    height: 72,   // ← ボタンの縦幅を少し低めに
-    borderWidth: 1.5,
-    borderRadius: 18,
-    alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    alignItems: 'center',
+    marginBottom: 14,
   },
-
-  // 種別：特大タイル
-  typeRow: { flexDirection: 'row', gap: 18, justifyContent: 'center', marginBottom: 14 }, // ← 中央寄せ
   typeBig: {
     width: 170,
     height: 170,
@@ -613,23 +600,43 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'column', // ← アイコンとテキストを縦並びで確実に中央揃え
-    gap: 10,
+    flexDirection: 'column',
+    marginHorizontal: 9,
+    marginVertical: 9,
   },
   typeBigText: {
+    color: '#000',
     fontSize: 20,
-    fontWeight: '700', // ← 太字
+    fontWeight: '700',
     textAlign: 'center',
+    marginTop: 6,
+  },
+
+  // 曜日：中央寄せ（gap を使わない）
+  weekGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  weekItem: {
+    width: '40%',
+    height: 72,
+    borderWidth: 1.5,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: '2%',
+    marginVertical: 7,
   },
 
   closeBtn: {
     borderWidth: 1,
     borderRadius: 999,
     height: 56,
-    paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 22,
     alignSelf: 'center',
-    marginTop: 2,
   },
 });

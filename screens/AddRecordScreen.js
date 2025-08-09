@@ -360,7 +360,7 @@ export default function AddRecordScreen({ navigation }) {
       {/* 種別選択 */}
       <Modal visible={typeModal} transparent animationType="fade" onRequestClose={() => setTypeModal(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border, alignItems: 'center' }]}>
+          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[styles.typeModalTitle, { color: C.text }]}>種別を選択</Text>
             <View style={styles.typeRow}>
               <Pressable
@@ -419,8 +419,8 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '800' },
 
-  formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
-  field: { width: '48%' },
+  formGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  field: { width: '48%', marginRight: '4%', marginBottom: 12 },
   label: { fontSize: 14, marginBottom: 6 },
   input: { borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, fontSize: 17 },
   divider: { height: 1, marginVertical: 12 },
@@ -429,7 +429,6 @@ const styles = StyleSheet.create({
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: 14,
@@ -440,17 +439,17 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
   },
-  primaryBtnText: { fontSize: 15, fontWeight: '500' },
+  primaryBtnText: { fontSize: 15, fontWeight: '500', marginLeft: 8 },
   ghostBtn: {
     alignItems: 'center',
-    gap: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 14,
     borderWidth: 0.8,
     flexDirection: 'row',
   },
-  ghostBtnText: { fontSize: 15, fontWeight: '500' },
+  ghostBtnText: { fontSize: 15, fontWeight: '500', marginLeft: 8 },
+
   bottomBar: {
     borderTopWidth: 1,
     paddingHorizontal: 16,
@@ -471,9 +470,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
 
-  // Type modal
+  // Type modal（中央寄せを強化 / gap不使用）
   typeModalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 18 },
-  typeRow: { flexDirection: 'row', gap: 18, justifyContent: 'center', marginBottom: 14 }, // 中央寄せ
+  typeRow: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
   typeBig: {
     width: 170,
     height: 170,
@@ -481,14 +487,17 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'column', // アイコンとテキストを縦並びに
-    gap: 10,
+    flexDirection: 'column',
+    marginHorizontal: 9,
+    marginVertical: 9,
   },
   typeBigText: {
     fontSize: 20,
-    fontWeight: '700', // ボールド
-    textAlign: 'center', // 端末でも中央に
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 6,
   },
+
   closeBtn: {
     borderWidth: 1,
     borderRadius: 999,
@@ -496,5 +505,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 22,
+    alignSelf: 'center',
   },
 });
