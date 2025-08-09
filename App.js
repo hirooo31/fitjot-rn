@@ -20,6 +20,9 @@ export default function App() {
     <NavigationContainer>
       <Tab.Navigator
         screenOptions={({ route }) => ({
+          // ★ ここで選択色をオレンジに
+          tabBarActiveTintColor: '#E87722',
+          tabBarInactiveTintColor: 'gray',
           tabBarIcon: ({ color, size }) => {
             let iconName;
             if (route.name === '一覧') iconName = 'list';

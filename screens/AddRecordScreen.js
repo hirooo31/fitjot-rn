@@ -150,7 +150,7 @@ export default function AddRecordScreen({ navigation }) {
                   { borderColor: C.black, backgroundColor: pressed ? C.ghostBg : 'transparent' },
                 ]}
               >
-                <Ionicons name="close" size={18} color={C.black} />
+                <Ionicons name="trash-outline" size={18} color={C.black} />
                 <Text style={[styles.ghostBtnText, { color: C.black }]}>削除</Text>
               </Pressable>
             </View>
