@@ -1,5 +1,5 @@
 // App.js
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from './screens/HomeScreen';
@@ -8,20 +8,53 @@ import WeeklyMenuScreen from './screens/WeeklyMenuScreen';
 import TimerScreen from './screens/TimerScreen';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { migrateFromAsyncStorage } from './utils/storage';
+import * as SplashScreen from 'expo-splash-screen';
 
 const Tab = createBottomTabNavigator();
 
+// スプラッシュを自動で消さない
+SplashScreen.preventAutoHideAsync();
+
 export default function App() {
-  React.useEffect(() => {
-    migrateFromAsyncStorage();
+  const [appReady, setAppReady] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const start = Date.now();
+      try {
+        // 初期化処理
+        await migrateFromAsyncStorage();
+
+        // 最低表示1.5秒確保
+        const elapsed = Date.now() - start;
+        const wait = Math.max(0, 1500 - elapsed);
+        if (wait > 0) {
+          await new Promise(res => setTimeout(res, wait));
+        }
+      } catch (e) {
+        console.warn('初期化中にエラー:', e);
+      } finally {
+        setAppReady(true);
+      }
+    })();
   }, []);
 
+  const onLayoutRootView = useCallback(async () => {
+    if (appReady) {
+      await SplashScreen.hideAsync();
+    }
+  }, [appReady]);
+
+  if (!appReady) {
+    // スプラッシュを表示中はレンダリングしない
+    return null;
+  }
+
   return (
-    <NavigationContainer>
+    <NavigationContainer onReady={onLayoutRootView}>
       <Tab.Navigator
         screenOptions={({ route }) => ({
-          // ★ ここで選択色をオレンジに
-          tabBarActiveTintColor: '#E87722',
+          tabBarActiveTintColor: '#E87722', // オレンジ
           tabBarInactiveTintColor: 'gray',
           tabBarIcon: ({ color, size }) => {
             let iconName;

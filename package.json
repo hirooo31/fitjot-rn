@@ -23,7 +23,8 @@
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.13.1",
     "react-native-vector-icons": "^10.2.0",
-    "expo-sqlite": "~15.2.14"
+    "expo-sqlite": "~15.2.14",
+    "expo-splash-screen": "~0.30.10"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"
