@@ -1,3 +1,4 @@
+// screens/AddRecordScreen.js
 import React, { useState, useLayoutEffect } from 'react';
 import {
   View,
@@ -370,7 +371,7 @@ export default function AddRecordScreen({ navigation }) {
                 ]}
               >
                 <Ionicons name="barbell-outline" size={42} color={C.accent} />
-                <Text style={{ color: C.text, fontSize: 20 }}>筋トレ</Text>
+                <Text style={[styles.typeBigText, { color: C.text }]}>筋トレ</Text>
               </Pressable>
               <Pressable
                 onPress={() => addSet('有酸素')}
@@ -380,7 +381,7 @@ export default function AddRecordScreen({ navigation }) {
                 ]}
               >
                 <Ionicons name="walk-outline" size={42} color={C.accent} />
-                <Text style={{ color: C.text, fontSize: 20 }}>有酸素</Text>
+                <Text style={[styles.typeBigText, { color: C.text }]}>有酸素</Text>
               </Pressable>
             </View>
             <Pressable
@@ -403,6 +404,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   emptyWrap: { padding: 28, alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 16 },
+
   card: {
     borderWidth: 1,
     borderRadius: 16,
@@ -416,11 +418,14 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '800' },
+
   formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
   field: { width: '48%' },
   label: { fontSize: 14, marginBottom: 6 },
   input: { borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, fontSize: 17 },
   divider: { height: 1, marginVertical: 12 },
+
+  // Buttons
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -455,6 +460,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+
+  // Modals
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   modalCard: {
     width: '94%',
@@ -463,8 +470,10 @@ const styles = StyleSheet.create({
     paddingVertical: 22,
     paddingHorizontal: 18,
   },
+
+  // Type modal
   typeModalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 18 },
-  typeRow: { flexDirection: 'row', gap: 18, justifyContent: 'center', marginBottom: 14 },
+  typeRow: { flexDirection: 'row', gap: 18, justifyContent: 'center', marginBottom: 14 }, // 中央寄せ
   typeBig: {
     width: 170,
     height: 170,
@@ -472,7 +481,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'column', // アイコンとテキストを縦並びに
     gap: 10,
+  },
+  typeBigText: {
+    fontSize: 20,
+    fontWeight: '700', // ボールド
+    textAlign: 'center', // 端末でも中央に
   },
   closeBtn: {
     borderWidth: 1,

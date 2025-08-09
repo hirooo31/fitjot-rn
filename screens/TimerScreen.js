@@ -66,9 +66,9 @@ export default function TimerScreen({ navigation }) {
 
   // Common running control
   const [running, setRunning] = useState(false);
-  const endAtRef = useRef(null);   // countdown: finish timestamp
-  const startAtRef = useRef(null); // stopwatch: start timestamp
-  const rafRef = useRef(null);
+  const endAtRef = useRef(null);   // countdown: finish timestamp (ms)
+  const startAtRef = useRef(null); // stopwatch: start timestamp (ms)
+  const intervalRef = useRef(null); // ← rAF ではなく setInterval で駆動
 
   // バイブ設定（カスタムスイッチ用アニメーション）
   const [vibrateOnFinish, setVibrateOnFinish] = useState(true);
@@ -137,27 +137,43 @@ export default function TimerScreen({ navigation }) {
     return Math.min(1, Math.max(0, 1 - remainSec / durationSec));
   }, [mode, durationSec, remainSec]);
 
-  const tick = () => {
-    if (!running) return;
-    if (mode === 'countdown') {
-      const now = Date.now();
-      const remain = Math.max(0, Math.round((endAtRef.current - now) / 1000));
-      setRemainSec(remain);
-      if (remain <= 0) {
-        setRunning(false);
-        endAtRef.current = null;
-        if (vibrateOnFinish) Vibration.vibrate([0, 300, 150, 300]);
-        Alert.alert('タイムアップ', '休憩を終了して次のセットへ！');
-      } else {
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    } else {
-      const now = Date.now();
-      const elapsed = Math.max(0, Math.round((now - startAtRef.current) / 1000));
-      setElapsedSec(elapsed);
-      rafRef.current = requestAnimationFrame(tick);
+  // ==== Timer engine (setInterval) ====
+  const clearTimerInterval = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
   };
+
+  useEffect(() => {
+    if (!running) {
+      clearTimerInterval();
+      return;
+    }
+    // 250msごとに現在時刻から再計算（ドリフトせずリアルタイム）
+    intervalRef.current = setInterval(() => {
+      const now = Date.now();
+      if (mode === 'countdown') {
+        if (!endAtRef.current) return;
+        const remainMs = Math.max(0, endAtRef.current - now);
+        const nextRemain = Math.ceil(remainMs / 1000);
+        setRemainSec(nextRemain);
+        if (remainMs <= 0) {
+          // 完了
+          setRunning(false);
+          clearTimerInterval();
+          endAtRef.current = null;
+          if (vibrateOnFinish) Vibration.vibrate([0, 300, 150, 300]);
+          Alert.alert('タイムアップ', '休憩を終了して次のセットへ！');
+        }
+      } else {
+        if (!startAtRef.current) return;
+        const elapsed = Math.max(0, Math.floor((now - startAtRef.current) / 1000));
+        setElapsedSec(elapsed);
+      }
+    }, 250);
+    return clearTimerInterval;
+  }, [running, mode, vibrateOnFinish]);
 
   // 共通：任意の秒数を現在モードに適用
   const applySeconds = (secInput) => {
@@ -166,15 +182,15 @@ export default function TimerScreen({ navigation }) {
       setDurationSec(sec);
       setRemainSec(sec);
       if (running) {
-        setRunning(false);
-        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        // 実行中は終了時刻を再計算して継続
         endAtRef.current = Date.now() + sec * 1000;
-        setRunning(true);
-        rafRef.current = requestAnimationFrame(tick);
       }
     } else {
       setElapsedSec(sec);
-      if (running) startAtRef.current = Date.now() - sec * 1000;
+      if (running) {
+        // 実行中は開始基準を調整
+        startAtRef.current = Date.now() - sec * 1000;
+      }
     }
   };
 
@@ -189,25 +205,27 @@ export default function TimerScreen({ navigation }) {
       startAtRef.current = Date.now() - elapsedSec * 1000;
     }
     setRunning(true);
-    rafRef.current = requestAnimationFrame(tick);
   };
 
   const pause = () => {
     if (!running) return;
     setRunning(false);
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    if (mode === 'countdown') {
+    // 現在の残り/経過を確定
+    if (mode === 'countdown' && endAtRef.current) {
       const now = Date.now();
-      const remain = Math.max(0, Math.round((endAtRef.current - now) / 1000));
+      const remain = Math.max(0, Math.ceil((endAtRef.current - now) / 1000));
       setRemainSec(remain);
+    } else if (mode === 'stopwatch' && startAtRef.current) {
+      const now = Date.now();
+      const elapsed = Math.max(0, Math.floor((now - startAtRef.current) / 1000));
+      setElapsedSec(elapsed);
     }
+    clearTimerInterval();
   };
 
   const reset = () => {
     setRunning(false);
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
+    clearTimerInterval();
     if (mode === 'countdown') {
       setRemainSec(durationSec);
       endAtRef.current = null;
@@ -219,11 +237,17 @@ export default function TimerScreen({ navigation }) {
 
   const onSwitchMode = (next) => {
     if (next === mode) return;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     setRunning(false);
-    rafRef.current = null;
-    if (next === 'countdown') setRemainSec(durationSec);
-    else setElapsedSec(0);
+    clearTimerInterval();
+    if (next === 'countdown') {
+      setRemainSec(durationSec);
+      endAtRef.current = null;
+      startAtRef.current = null;
+    } else {
+      setElapsedSec(0);
+      startAtRef.current = null;
+      endAtRef.current = null;
+    }
     setMode(next);
   };
 
@@ -257,20 +281,26 @@ export default function TimerScreen({ navigation }) {
   };
 
   const plusMinus = (delta) => {
-    const next = Math.max(0, (mode === 'countdown' ? remainSec : elapsedSec) + delta);
     if (mode === 'countdown') {
-      const newDuration = Math.max(0, durationSec + delta);
-      setDurationSec(newDuration);
-      setRemainSec(next);
+      const nextRemain = Math.max(0, remainSec + delta);
+      const nextDuration = Math.max(0, durationSec + delta);
+      setDurationSec(nextDuration);
+      setRemainSec(nextRemain);
+      if (running) {
+        endAtRef.current = Date.now() + nextRemain * 1000;
+      }
     } else {
-      setElapsedSec(next);
-      if (running) startAtRef.current = Date.now() - next * 1000;
+      const nextElapsed = Math.max(0, elapsedSec + delta);
+      setElapsedSec(nextElapsed);
+      if (running) {
+        startAtRef.current = Date.now() - nextElapsed * 1000;
+      }
     }
   };
 
   useEffect(() => {
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      clearTimerInterval();
     };
   }, []);
 
