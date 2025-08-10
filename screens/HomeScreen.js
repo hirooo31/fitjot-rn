@@ -10,13 +10,17 @@ import {
   TextInput,
   Alert,
   useColorScheme,
+  Platform,                // ★ 追加
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import dayjs from 'dayjs';
+import 'dayjs/locale/ja';  // ★ 追加：曜日などを日本語に
 import { Swipeable } from 'react-native-gesture-handler';
 import { getRecords, updateRecordById, deleteRecordById, saveRecord } from '../utils/storage';
+
+dayjs.locale('ja');        // ★ 追加：この画面内は常に日本語
 
 const ACCENT = '#D46E2C';
 
@@ -264,7 +268,6 @@ export default function HomeScreen() {
                       overshootRight={false}
                       renderRightActions={() => <RightAction />}
                       onSwipeableWillOpen={() => {
-                        // 既に開いている行があれば閉じる
                         if (openRowRef.current && openRowRef.current !== rowRefs.current[r.id]) {
                           openRowRef.current.close();
                         }
@@ -272,7 +275,6 @@ export default function HomeScreen() {
                       }}
                       onSwipeableOpen={(direction) => {
                         if (direction === 'right') {
-                          // 開いた直後に閉じる（背景が他行に残らないように）
                           rowRefs.current[r.id]?.close();
                           handleDeleteById(r.id);
                         }
@@ -354,11 +356,20 @@ export default function HomeScreen() {
           <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[styles.modalTitle, { color: C.text }]}>記録を編集</Text>
 
-            <Text style={[styles.label, { color: C.sub }]}>📅 日付を選択</Text>
+            {/* ★ ラベルを行にしてカレンダーアイコン（オレンジ）を追加 */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <Ionicons name="calendar-outline" size={18} color={C.accent} />
+              <Text style={{ color: C.sub, fontWeight: '700' }}>日付を選択</Text>
+            </View>
+
             <DateTimePicker
               value={editRecord?.date ? new Date(editRecord.date) : new Date()}
               mode="date"
-              display="spinner"
+              display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}   // ★ iOS:スピナー / Android:カレンダー
+              locale={Platform.OS === 'ios' ? 'ja-JP' : undefined}       // ★ iOSのみ日本語を強制
+              {...(Platform.OS === 'android'
+                ? { positiveButton: { label: '決定' }, negativeButton: { label: 'キャンセル' } }
+                : {})}                                                   // ★ Androidのボタン文言を日本語に
               onChange={onDateChange}
               style={{ marginBottom: 12, alignSelf: 'center' }}
             />
