@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "fitjot",
-    "slug": "fitjot",
+    "slug": "fitjot-rn",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png", 
