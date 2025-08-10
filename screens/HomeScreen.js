@@ -18,14 +18,12 @@ import dayjs from 'dayjs';
 import { Swipeable } from 'react-native-gesture-handler';
 import { getRecords, updateRecordById, deleteRecordById, saveRecord } from '../utils/storage';
 
-// ※ 他画面と合わせてオレンジは“控えめ＆アイコン中心”の運用に
 const ACCENT = '#D46E2C';
 
 export default function HomeScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
 
-  // Design tokens
   const C = {
     light: {
       bg: '#f6f6f6',
@@ -64,8 +62,8 @@ export default function HomeScreen() {
   const [editRecord, setEditRecord] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Undo（最後に消したレコードを一時保持）
-  const [undo, setUndo] = useState(null); // { record }
+  // Undo
+  const [undo, setUndo] = useState(null);
   const undoTimer = useRef(null);
 
   useFocusEffect(
@@ -89,11 +87,9 @@ export default function HomeScreen() {
         if (!grouped[date]) grouped[date] = [];
         grouped[date].push(r);
       });
-      // 同日内は新しいID順
       Object.keys(grouped).forEach((k) => {
         grouped[k].sort((a, b) => (a.id > b.id ? -1 : 1));
       });
-      // 日付降順
       const sorted = Object.fromEntries(
         Object.entries(grouped).sort(([a], [b]) => (a > b ? -1 : 1))
       );
@@ -120,7 +116,7 @@ export default function HomeScreen() {
     }
     const rec = undo.record;
     setUndo(null);
-    await saveRecord(rec); // 元の id ごと復元
+    await saveRecord(rec);
     await loadRecords();
   };
 
@@ -184,7 +180,7 @@ export default function HomeScreen() {
     records.some((r) => (r.exercise || '').toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // サブタイトル（詳細固定）
+  // 詳細サブタイトル（元の表現そのまま）
   const subVerbose = (r) => {
     if (r.type === '筋トレ') {
       const core = [r.weight ? `${r.weight}kg` : null, r.reps ? `${r.reps}回` : null]
@@ -203,7 +199,6 @@ export default function HomeScreen() {
   const renderSubtitle = (r) => subVerbose(r);
   const isEmpty = filteredEntries.length === 0;
 
-  // 右スワイプ背景（視覚フィードバック）
   const RightAction = () => (
     <View style={[styles.swipeBG, { backgroundColor: C.ghostBg, borderLeftColor: C.border }]}>
       <Ionicons name="trash-outline" size={20} color={C.black} />
@@ -228,7 +223,11 @@ export default function HomeScreen() {
             returnKeyType="search"
           />
           {searchQuery?.length > 0 && (
-            <TouchableOpacity onPress={clearSearch} style={styles.clearBtn}>
+            <TouchableOpacity
+              onPress={clearSearch}
+              style={styles.clearBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Ionicons name="close" size={18} color={C.sub} />
             </TouchableOpacity>
           )}
@@ -267,11 +266,10 @@ export default function HomeScreen() {
                     <View
                       style={[
                         styles.card,
-                        styles.cardRegular, // ← 詳細デザイン（ゆったりパディング）
+                        styles.cardRegular,
                         { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
                       ]}
                     >
-                      {/* 左：タイプアイコン（チップは詳細では非表示） */}
                       <View style={styles.leftIconWrap}>
                         <View
                           style={[
@@ -287,7 +285,6 @@ export default function HomeScreen() {
                         </View>
                       </View>
 
-                      {/* 中央：タイトル + サブ（詳細表記） */}
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text
                           style={[styles.itemTitle, { color: C.text }]}
@@ -307,7 +304,6 @@ export default function HomeScreen() {
                         )}
                       </View>
 
-                      {/* 右：操作（編集/削除） */}
                       <View style={{ flexDirection: 'row', gap: 8 }}>
                         <TouchableOpacity
                           onPress={() => openEditModal(date, i)}
@@ -477,7 +473,6 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* Undo スナックバー */}
       {undo && (
         <View
           style={[
@@ -506,10 +501,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     paddingLeft: 12,
-    paddingRight: 34,
+    paddingRight: 40, // ← クリアボタンの分を余裕もって確保
     fontSize: 16,
   },
-  clearBtn: { position: 'absolute', right: 8, top: 10, padding: 6 },
+  // ← 縦センターで常にドンピシャ
+  clearBtn: {
+    position: 'absolute',
+    right: 8,
+    top: 0,
+    bottom: 0,            // 高さを入力と合わせる
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 32,            // タップ領域を安定確保
+  },
 
   // Section header
   sectionHeader: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
