@@ -17,8 +17,8 @@ import { getWeeklyMenu, saveWeeklyMenu, saveRecord } from '../utils/storage';
 
 const weekdays = ['月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日', '日曜日'];
 
-// 差し色（ロゴのオレンジ）
-const ACCENT = '#E87722';
+// 差し色（控えめオレンジ：メインボタン背景には使わない）
+const ACCENT = '#D46E2C';
 
 export default function WeeklyMenuScreen({ navigation }) {
   const scheme = useColorScheme();
@@ -36,8 +36,10 @@ export default function WeeklyMenuScreen({ navigation }) {
       ghostBg: 'rgba(0,0,0,0.03)',
       black: '#111111',
       accent: ACCENT,
-      accentSoft: 'rgba(232,119,34,0.12)',
+      accentSoft: 'rgba(212,110,44,0.12)',
       shadow: '#bdbdbd',
+      neutralBtnBg: '#f7f7f7',
+      neutralBtnBgPressed: '#efefef',
     },
     dark: {
       bg: '#0e0e0e',
@@ -50,8 +52,10 @@ export default function WeeklyMenuScreen({ navigation }) {
       ghostBg: 'rgba(255,255,255,0.05)',
       black: '#fafafa',
       accent: ACCENT,
-      accentSoft: 'rgba(232,119,34,0.2)',
+      accentSoft: 'rgba(212,110,44,0.2)',
       shadow: '#000000',
+      neutralBtnBg: '#1b1b1b',
+      neutralBtnBgPressed: '#232323',
     },
   }[isDark ? 'dark' : 'light'];
 
@@ -62,6 +66,16 @@ export default function WeeklyMenuScreen({ navigation }) {
   const [typeModal, setTypeModal] = useState(false);
   const [typeContext, setTypeContext] = useState(null); // 'create-day' | 'add-set'
   const [selectedDay, setSelectedDay] = useState(null);
+
+  // 種別選択2ボタンの自動リサイズ（中央間隔は固定18）
+  const GAP = 18;
+  const MAX_BOX = 170;
+  const MIN_BOX = 120;
+  const [typeBox, setTypeBox] = useState(MAX_BOX);
+
+  // 曜日ドット（1行7個）の自動サイズ
+  const [weekDot, setWeekDot] = useState(44);
+  const [weekGap, setWeekGap] = useState(10);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -218,46 +232,46 @@ export default function WeeklyMenuScreen({ navigation }) {
           key={day}
           style={[
             styles.card,
-            {
-              backgroundColor: C.card,
-              borderColor: C.border,
-              shadowColor: C.shadow,
-            },
+            { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
           ]}
         >
           <View style={styles.cardHeader}>
             <Text style={[styles.cardTitle, { color: C.text }]}>{day}</Text>
+
+            {/* アクション：右寄せ。削除はニュートラルなアイコンのみ */}
             <View style={styles.actions}>
-              {/* 記録送信（そのまま） */}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${day}を記録`}
                 onPress={() => handleSubmitDay(day)}
                 style={({ pressed }) => [
                   styles.primaryBtn,
                   {
-                    backgroundColor: isDark ? '#1b1b1b' : '#f2f2f2',
+                    backgroundColor: pressed ? C.neutralBtnBgPressed : C.neutralBtnBg,
                     borderColor: C.border,
                     shadowColor: C.shadow,
                     transform: [{ translateY: pressed ? 1 : 0 }],
                   },
                 ]}
               >
-                <Ionicons name="send-outline" size={18} color={C.accent} />
-                <Text style={[styles.primaryBtnText, { color: C.text }]}>記録送信</Text>
+                {/* アイコンのみオレンジ */}
+                <Ionicons name="document-text-outline" size={18} color={C.accent} />
+                <Text style={[styles.primaryBtnText, { color: C.text }]}>記録</Text>
               </Pressable>
 
-              {/* 削除 */}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${day}を削除`}
                 onPress={() => handleRemoveDay(day)}
                 style={({ pressed }) => [
-                  styles.ghostBtn,
+                  styles.iconBtn,
                   {
-                    borderColor: C.black,
+                    borderColor: C.border,
                     backgroundColor: pressed ? C.ghostBg : 'transparent',
                   },
                 ]}
               >
-                <Ionicons name="trash-outline" size={18} color={C.black} />
-                <Text style={[styles.ghostBtnText, { color: C.black }]}>削除</Text>
+                <Ionicons name="trash-outline" size={18} color={C.sub} />
               </Pressable>
             </View>
           </View>
@@ -268,8 +282,16 @@ export default function WeeklyMenuScreen({ navigation }) {
             <View key={idx} style={styles.setRow}>
               <View style={styles.setHeader}>
                 <Text style={[styles.setType, { color: C.sub }]}>{set.type}</Text>
-                <TouchableOpacity onPress={() => handleRemoveSet(day, idx)}>
-                  <Ionicons name="close" size={20} color={C.sub} />
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="このセットを削除"
+                  onPress={() => handleRemoveSet(day, idx)}
+                  style={({ pressed }) => [
+                    styles.rowIconBtn,
+                    { backgroundColor: pressed ? C.ghostBg : 'transparent' },
+                  ]}
+                >
+                  <Ionicons name="close" size={18} color={C.sub} />
                 </TouchableOpacity>
               </View>
 
@@ -283,11 +305,7 @@ export default function WeeklyMenuScreen({ navigation }) {
                     onChangeText={(v) => handleChange(day, idx, 'exercise', v)}
                     style={[
                       styles.input,
-                      {
-                        backgroundColor: C.inputBg,
-                        borderColor: C.inputBorder,
-                        color: C.text,
-                      },
+                      { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
                     ]}
                     returnKeyType="done"
                   />
@@ -384,11 +402,7 @@ export default function WeeklyMenuScreen({ navigation }) {
             onPress={() => handleAddSet(day)}
             style={({ pressed }) => [
               styles.addSetBtn,
-              {
-                backgroundColor: C.ghostBg,
-                borderColor: C.border,
-                opacity: pressed ? 0.92 : 1,
-              },
+              { backgroundColor: C.ghostBg, borderColor: C.border, opacity: pressed ? 0.92 : 1 },
             ]}
           >
             <Ionicons name="add" size={18} color={C.text} />
@@ -397,28 +411,44 @@ export default function WeeklyMenuScreen({ navigation }) {
         </View>
       ))}
 
-      {/* 曜日選択 */}
+      {/* 曜日選択（1行ドット） */}
       <Modal visible={weekdayModal} transparent animationType="fade" onRequestClose={() => setWeekdayModal(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[styles.modalTitle, { color: C.text }]}>曜日を追加</Text>
-            <View style={styles.weekGrid}>
-              {weekdays.map((d) => (
+
+            <View
+              style={styles.weekDotsWrap}
+              onLayout={(e) => {
+                const GAP = 10; // ドット間
+                const w = e.nativeEvent.layout.width;
+                // 7個 + ギャップ6つが必ず収まる直径（40〜56の範囲）
+                const size = Math.min(56, Math.max(40, Math.floor((w - GAP * 6) / 7)));
+                if (size !== weekDot) setWeekDot(size);
+                setWeekGap(GAP);
+              }}
+            >
+              {weekdays.map((d, i) => (
                 <Pressable
                   key={d}
                   onPress={() => handleDaySelect(d)}
                   style={({ pressed }) => [
-                    styles.weekItem,
+                    styles.weekDot,
                     {
+                      width: weekDot,
+                      height: weekDot,
+                      marginRight: i < weekdays.length - 1 ? weekGap : 0,
                       backgroundColor: pressed ? C.accentSoft : C.ghostBg,
                       borderColor: pressed ? C.accent : C.border,
+                      shadowColor: C.shadow,
                     },
                   ]}
                 >
-                  <Text style={{ color: C.text, fontSize: 18, fontWeight: '700', textAlign: 'center' }}>{d}</Text>
+                  <Text style={[styles.weekDotText, { color: C.text }]}>{d[0]}</Text>
                 </Pressable>
               ))}
             </View>
+
             <Pressable
               onPress={() => setWeekdayModal(false)}
               style={({ pressed }) => [
@@ -435,36 +465,40 @@ export default function WeeklyMenuScreen({ navigation }) {
       {/* 種別選択（共用） */}
       <Modal visible={typeModal} transparent animationType="fade" onRequestClose={() => setTypeModal(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
+          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border, alignItems: 'center' }]}>
             <Text style={[styles.typeModalTitle, { color: C.text }]}>種別を選択</Text>
-            <View style={styles.typeRow}>
+
+            {/* 幅計測して2枚＋GAP=18が入るように自動調整 */}
+            <View
+              style={styles.typeRow}
+              onLayout={(e) => {
+                const w = e.nativeEvent.layout.width;
+                const s = Math.min(MAX_BOX, Math.max(MIN_BOX, Math.floor((w - GAP) / 2)));
+                if (s !== typeBox) setTypeBox(s);
+              }}
+            >
               <Pressable
                 onPress={() => confirmType('筋トレ')}
                 style={({ pressed }) => [
                   styles.typeBig,
-                  {
-                    backgroundColor: pressed ? C.accentSoft : C.ghostBg,
-                    borderColor: pressed ? C.accent : C.border,
-                  },
+                  { width: typeBox, backgroundColor: pressed ? C.accentSoft : C.ghostBg, borderColor: pressed ? C.accent : C.border },
                 ]}
               >
                 <Ionicons name="barbell-outline" size={42} color={C.accent} />
-                <Text style={styles.typeBigText}>筋トレ</Text>
+                <Text style={[styles.typeBigText, { color: C.text }]}>筋トレ</Text>
               </Pressable>
               <Pressable
                 onPress={() => confirmType('有酸素')}
                 style={({ pressed }) => [
                   styles.typeBig,
-                  {
-                    backgroundColor: pressed ? C.accentSoft : C.ghostBg,
-                    borderColor: pressed ? C.accent : C.border,
-                  },
+                  { width: typeBox, backgroundColor: pressed ? C.accentSoft : C.ghostBg, borderColor: pressed ? C.accent : C.border },
                 ]}
               >
                 <Ionicons name="walk-outline" size={42} color={C.accent} />
-                <Text style={styles.typeBigText}>有酸素</Text>
+                <Text style={[styles.typeBigText, { color: C.text }]}>有酸素</Text>
               </Pressable>
             </View>
+
             <Pressable
               onPress={() => setTypeModal(false)}
               style={({ pressed }) => [
@@ -472,7 +506,7 @@ export default function WeeklyMenuScreen({ navigation }) {
                 { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
               ]}
             >
-              <Text style={{ color: C.text, fontSize: 16 }}>閉じる</Text>
+              <Text style={{ color: C.text, fontSize: 16, fontWeight: '600' }}>閉じる</Text>
             </Pressable>
           </View>
         </View>
@@ -501,30 +535,30 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '800' },
 
-  actions: { flexDirection: 'row', alignItems: 'center' },
+  // アクション少しだけ詰める
+  actions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
 
+  // NEW: プライマリ（ニュートラル背景のアウトライン・ピル）
+  // 文字数に合わせて縮む：minWidthを設定しない＆パディング控えめ
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 14,
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
     borderWidth: 1,
-    minWidth: 136,
     justifyContent: 'center',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    marginLeft: 10,
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
-  primaryBtnText: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
+  primaryBtnText: { fontSize: 15, fontWeight: '700' },
 
+  // 既存の汎用ゴースト（残し）
   ghostBtn: {
     alignItems: 'center',
+    gap: 8,
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: 14,
@@ -532,24 +566,38 @@ const styles = StyleSheet.create({
     minWidth: 104,
     justifyContent: 'center',
     flexDirection: 'row',
-    marginLeft: 10,
   },
-  ghostBtnText: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginLeft: 8,
+
+  // ニュートラルなアイコン丸ボタン（削除用）
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // セット行の×ボタン（タッチターゲット確保）
+  rowIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   addSetBtn: {
     marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     borderWidth: 1,
     paddingVertical: 12,
     borderRadius: 999,
     justifyContent: 'center',
   },
-  addSetText: { fontSize: 16, fontWeight: '700', marginLeft: 6 },
+  addSetText: { fontSize: 16, fontWeight: '700' },
 
   divider: { height: 1, marginVertical: 12 },
 
@@ -558,10 +606,8 @@ const styles = StyleSheet.create({
 
   setType: { fontSize: 14, fontWeight: '700' },
 
-  formGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  field: { width: '48%', marginRight: '4%', marginBottom: 12 },
-  // 最後の列は右余白を消す
-  // （簡易対応: 2列目は width: '48%' のままでも中央寄せの影響はない）
+  formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  field: { width: '48%' },
 
   label: { fontSize: 14, marginBottom: 6 },
   input: {
@@ -581,62 +627,43 @@ const styles = StyleSheet.create({
     paddingVertical: 22,
     paddingHorizontal: 18,
   },
-  modalTitle: { fontSize: 20, fontWeight: '900', textAlign: 'center', marginBottom: 18 },
-
-  // 種別モーダル
+  modalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 14 },
   typeModalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 18 },
-  typeRow: {
-    width: '100%',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
+
+  // 種別：特大タイル（中央間隔18は維持）
+  typeRow: { flexDirection: 'row', gap: 18, justifyContent: 'center', marginBottom: 14 },
   typeBig: {
-    width: 170,
-    height: 170,
+    aspectRatio: 1,
     borderRadius: 24,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'column',
-    marginHorizontal: 9,
-    marginVertical: 9,
+    gap: 10,
   },
-  typeBigText: {
-    color: '#000',
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 6,
-  },
+  typeBigText: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
 
-  // 曜日：中央寄せ（gap を使わない）
-  weekGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginBottom: 18,
-  },
-  weekItem: {
-    width: '40%',
-    height: 72,
-    borderWidth: 1.5,
-    borderRadius: 18,
+  // 曜日：1行ドット
+  weekDotsWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
+  weekDot: {
+    borderWidth: 1.2,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: '2%',
-    marginVertical: 7,
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
   },
+  weekDotText: { fontSize: 16, fontWeight: '700' },
 
   closeBtn: {
     borderWidth: 1,
     borderRadius: 999,
-    height: 56,
+    height: 52,
+    paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 22,
     alignSelf: 'center',
+    marginTop: 2,
   },
 });

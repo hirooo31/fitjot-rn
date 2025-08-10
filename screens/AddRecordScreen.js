@@ -17,6 +17,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { saveRecord } from '../utils/storage';
 
+// 控えめオレンジ（背景には使わない）
+const ACCENT = '#D46E2C';
+
 export default function AddRecordScreen({ navigation }) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
@@ -32,9 +35,11 @@ export default function AddRecordScreen({ navigation }) {
       inputBorder: '#dddddd',
       ghostBg: 'rgba(0,0,0,0.03)',
       black: '#111111',
-      accent: '#E87722',
-      accentSoft: 'rgba(232,119,34,0.12)',
+      accent: ACCENT,
+      accentSoft: 'rgba(212,110,44,0.12)',
       shadow: '#bdbdbd',
+      neutralBtnBg: '#f7f7f7',
+      neutralBtnBgPressed: '#efefef',
     },
     dark: {
       bg: '#0e0e0e',
@@ -46,9 +51,11 @@ export default function AddRecordScreen({ navigation }) {
       inputBorder: '#2a2a2a',
       ghostBg: 'rgba(255,255,255,0.05)',
       black: '#fafafa',
-      accent: '#E87722',
-      accentSoft: 'rgba(232,119,34,0.2)',
+      accent: ACCENT,
+      accentSoft: 'rgba(212,110,44,0.2)',
       shadow: '#000000',
+      neutralBtnBg: '#1b1b1b',
+      neutralBtnBgPressed: '#232323',
     },
   }[isDark ? 'dark' : 'light'];
 
@@ -57,6 +64,12 @@ export default function AddRecordScreen({ navigation }) {
   const [pickedDate, setPickedDate] = useState(new Date());
   const [dateModal, setDateModal] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
+
+  // 種別タイルの自動リサイズ
+  const GAP = 18;
+  const MAX_BOX = 170;
+  const MIN_BOX = 120;
+  const [typeBox, setTypeBox] = useState(MAX_BOX);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -144,15 +157,17 @@ export default function AddRecordScreen({ navigation }) {
           >
             <View style={styles.cardHeader}>
               <Text style={[styles.cardTitle, { color: C.text }]}>{s.type}</Text>
+              {/* 削除：テキストをやめて、ニュートラルなアイコン丸ボタン */}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="このセットを削除"
                 onPress={() => removeSet(idx)}
                 style={({ pressed }) => [
-                  styles.ghostBtn,
-                  { borderColor: C.black, backgroundColor: pressed ? C.ghostBg : 'transparent' },
+                  styles.iconBtn,
+                  { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
                 ]}
               >
-                <Ionicons name="trash-outline" size={18} color={C.black} />
-                <Text style={[styles.ghostBtnText, { color: C.black }]}>削除</Text>
+                <Ionicons name="trash-outline" size={18} color={C.sub} />
               </Pressable>
             </View>
 
@@ -266,12 +281,13 @@ export default function AddRecordScreen({ navigation }) {
           </Text>
         </Pressable>
 
+        {/* プライマリ：ニュートラル背景・アウトラインピル（文言に合わせて縮む） */}
         <Pressable
           onPress={submit}
           style={({ pressed }) => [
             styles.primaryBtn,
             {
-              backgroundColor: isDark ? '#1b1b1b' : '#f2f2f2',
+              backgroundColor: pressed ? C.neutralBtnBgPressed : C.neutralBtnBg,
               borderColor: C.border,
               shadowColor: C.shadow,
               transform: [{ translateY: pressed ? 1 : 0 }],
@@ -280,8 +296,9 @@ export default function AddRecordScreen({ navigation }) {
           ]}
           disabled={sets.length === 0}
         >
-          <Ionicons name="send-outline" size={18} color={C.accent} />
-          <Text style={[styles.primaryBtnText, { color: C.text }]}>記録送信</Text>
+          {/* アイコンのみオレンジ */}
+          <Ionicons name="document-text-outline" size={18} color={C.accent} />
+          <Text style={[styles.primaryBtnText, { color: C.text }]}>記録</Text>
         </Pressable>
       </View>
 
@@ -360,30 +377,49 @@ export default function AddRecordScreen({ navigation }) {
       {/* 種別選択 */}
       <Modal visible={typeModal} transparent animationType="fade" onRequestClose={() => setTypeModal(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
+          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border, alignItems: 'center' }]}>
             <Text style={[styles.typeModalTitle, { color: C.text }]}>種別を選択</Text>
-            <View style={styles.typeRow}>
+
+            {/* 幅計測して2枚＋GAPが入るように自動調整 */}
+            <View
+              style={styles.typeRow}
+              onLayout={(e) => {
+                const w = e.nativeEvent.layout.width;
+                const s = Math.min(MAX_BOX, Math.max(MIN_BOX, Math.floor((w - GAP) / 2)));
+                if (s !== typeBox) setTypeBox(s);
+              }}
+            >
               <Pressable
                 onPress={() => addSet('筋トレ')}
                 style={({ pressed }) => [
                   styles.typeBig,
-                  { backgroundColor: pressed ? C.accentSoft : C.ghostBg, borderColor: pressed ? C.accent : C.border },
+                  {
+                    width: typeBox,
+                    backgroundColor: pressed ? C.accentSoft : C.ghostBg,
+                    borderColor: pressed ? C.accent : C.border,
+                  },
                 ]}
               >
                 <Ionicons name="barbell-outline" size={42} color={C.accent} />
                 <Text style={[styles.typeBigText, { color: C.text }]}>筋トレ</Text>
               </Pressable>
+
               <Pressable
                 onPress={() => addSet('有酸素')}
                 style={({ pressed }) => [
                   styles.typeBig,
-                  { backgroundColor: pressed ? C.accentSoft : C.ghostBg, borderColor: pressed ? C.accent : C.border },
+                  {
+                    width: typeBox,
+                    backgroundColor: pressed ? C.accentSoft : C.ghostBg,
+                    borderColor: pressed ? C.accent : C.border,
+                  },
                 ]}
               >
                 <Ionicons name="walk-outline" size={42} color={C.accent} />
                 <Text style={[styles.typeBigText, { color: C.text }]}>有酸素</Text>
               </Pressable>
             </View>
+
             <Pressable
               onPress={() => setTypeModal(false)}
               style={({ pressed }) => [
@@ -419,36 +455,50 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '800' },
 
-  formGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  field: { width: '48%', marginRight: '4%', marginBottom: 12 },
+  formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
+  field: { width: '48%' },
   label: { fontSize: 14, marginBottom: 6 },
   input: { borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, fontSize: 17 },
   divider: { height: 1, marginVertical: 12 },
 
   // Buttons
+  // プライマリ：ニュートラル背景・アウトラインピル（文言に合わせて縮む）
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 14,
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
     borderWidth: 1,
-    minWidth: 136,
     justifyContent: 'center',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
-  primaryBtnText: { fontSize: 15, fontWeight: '500', marginLeft: 8 },
+  primaryBtnText: { fontSize: 15, fontWeight: '700' },
+
+  // 日付のゴーストボタン（据え置き）
   ghostBtn: {
     alignItems: 'center',
+    gap: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 14,
     borderWidth: 0.8,
     flexDirection: 'row',
   },
-  ghostBtnText: { fontSize: 15, fontWeight: '500', marginLeft: 8 },
+  ghostBtnText: { fontSize: 15, fontWeight: '500' },
+
+  // アイコンのみ丸ボタン（削除に使用）
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   bottomBar: {
     borderTopWidth: 1,
@@ -470,34 +520,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
 
-  // Type modal（中央寄せを強化 / gap不使用）
+  // Type modal
   typeModalTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 18 },
-  typeRow: {
-    width: '100%',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
+  typeRow: { flexDirection: 'row', gap: 18, justifyContent: 'center', marginBottom: 14 },
   typeBig: {
-    width: 170,
-    height: 170,
+    aspectRatio: 1, // 正方形
     borderRadius: 24,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'column',
-    marginHorizontal: 9,
-    marginVertical: 9,
+    gap: 10,
   },
   typeBigText: {
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
-    marginTop: 6,
   },
-
   closeBtn: {
     borderWidth: 1,
     borderRadius: 999,
@@ -505,6 +544,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 22,
-    alignSelf: 'center',
   },
 });
