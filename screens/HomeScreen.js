@@ -66,6 +66,10 @@ export default function HomeScreen() {
   const [undo, setUndo] = useState(null);
   const undoTimer = useRef(null);
 
+  // Swipeable 管理（同時に1つだけ開く）
+  const rowRefs = useRef({});
+  const openRowRef = useRef(null);
+
   useFocusEffect(
     useCallback(() => {
       loadRecords();
@@ -120,19 +124,20 @@ export default function HomeScreen() {
     await loadRecords();
   };
 
-  const handleDelete = async (date, index) => {
+  // ← id で確実に消す
+  const handleDeleteById = async (id) => {
     try {
-      const target = groupedRecords[date][index];
-      await deleteRecordById(target.id);
-      triggerUndo(target);
+      await deleteRecordById(id);
+      const all = Object.values(groupedRecords).flat();
+      const target = all.find((r) => r.id === id);
+      if (target) triggerUndo(target);
       await loadRecords();
     } catch {
       Alert.alert('エラー', '削除に失敗しました');
     }
   };
 
-  const openEditModal = (date, index) => {
-    const record = groupedRecords[date][index];
+  const openEditModal = (record) => {
     setEditRecord({ ...record });
     setEditModalVisible(true);
   };
@@ -180,7 +185,6 @@ export default function HomeScreen() {
     records.some((r) => (r.exercise || '').toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // 詳細サブタイトル（元の表現そのまま）
   const subVerbose = (r) => {
     if (r.type === '筋トレ') {
       const core = [r.weight ? `${r.weight}kg` : null, r.reps ? `${r.reps}回` : null]
@@ -196,11 +200,8 @@ export default function HomeScreen() {
     return [core, sets].filter(Boolean).join('');
   };
 
-  const renderSubtitle = (r) => subVerbose(r);
-  const isEmpty = filteredEntries.length === 0;
-
   const RightAction = () => (
-    <View style={[styles.swipeBG, { backgroundColor: C.ghostBg, borderLeftColor: C.border }]}>
+    <View style={[styles.swipeBG, { backgroundColor: C.bg }]}>
       <Ionicons name="trash-outline" size={20} color={C.black} />
       <Text style={[styles.swipeActionText, { color: C.black }]}>削除</Text>
     </View>
@@ -235,7 +236,7 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-        {isEmpty ? (
+        {filteredEntries.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Ionicons name="server-outline" size={48} color={C.sub} />
             <Text style={[styles.emptyTitle, { color: C.sub }]}>記録はまだありません</Text>
@@ -252,74 +253,89 @@ export default function HomeScreen() {
                   </Text>
                 </View>
 
-                {items.map((r, i) => (
-                  <Swipeable
-                    key={r.id ?? i}
-                    friction={1.5}
-                    rightThreshold={48}
-                    overshootRight={false}
-                    renderRightActions={() => <RightAction />}
-                    onSwipeableOpen={(direction) => {
-                      if (direction === 'right') handleDelete(date, i);
-                    }}
-                  >
-                    <View
-                      style={[
-                        styles.card,
-                        styles.cardRegular,
-                        { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
-                      ]}
+                {items.map((r) => (
+                  <View key={r.id} style={styles.rowWrap}>
+                    <Swipeable
+                      ref={(ref) => {
+                        if (ref) rowRefs.current[r.id] = ref;
+                      }}
+                      friction={1.5}
+                      rightThreshold={48}
+                      overshootRight={false}
+                      renderRightActions={() => <RightAction />}
+                      onSwipeableWillOpen={() => {
+                        // 既に開いている行があれば閉じる
+                        if (openRowRef.current && openRowRef.current !== rowRefs.current[r.id]) {
+                          openRowRef.current.close();
+                        }
+                        openRowRef.current = rowRefs.current[r.id];
+                      }}
+                      onSwipeableOpen={(direction) => {
+                        if (direction === 'right') {
+                          // 開いた直後に閉じる（背景が他行に残らないように）
+                          rowRefs.current[r.id]?.close();
+                          handleDeleteById(r.id);
+                        }
+                      }}
                     >
-                      <View style={styles.leftIconWrap}>
-                        <View
-                          style={[
-                            styles.iconCircle,
-                            { borderColor: C.border, backgroundColor: C.ghostBg },
-                          ]}
-                        >
-                          <Ionicons
-                            name={r.type === '筋トレ' ? 'barbell-outline' : 'walk-outline'}
-                            size={18}
-                            color={C.accent}
-                          />
+                      <View
+                        style={[
+                          styles.card,
+                          styles.cardRegular,
+                          { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
+                        ]}
+                      >
+                        <View style={styles.leftIconWrap}>
+                          <View
+                            style={[
+                              styles.iconCircle,
+                              { borderColor: C.border, backgroundColor: C.ghostBg },
+                            ]}
+                          >
+                            <Ionicons
+                              name={r.type === '筋トレ' ? 'barbell-outline' : 'walk-outline'}
+                              size={18}
+                              color={C.accent}
+                            />
+                          </View>
                         </View>
-                      </View>
 
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text
-                          style={[styles.itemTitle, { color: C.text }]}
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {r.exercise || r.type}
-                        </Text>
-                        {!!renderSubtitle(r) && (
+                        <View style={{ flex: 1, minWidth: 0 }}>
                           <Text
-                            style={[styles.itemSub, { color: C.sub }]}
+                            style={[styles.itemTitle, { color: C.text }]}
                             numberOfLines={1}
                             ellipsizeMode="tail"
                           >
-                            {renderSubtitle(r)}
+                            {r.exercise || r.type}
                           </Text>
-                        )}
-                      </View>
+                          {!!subVerbose(r) && (
+                            <Text
+                              style={[styles.itemSub, { color: C.sub }]}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {subVerbose(r)}
+                            </Text>
+                          )}
+                        </View>
 
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <TouchableOpacity
-                          onPress={() => openEditModal(date, i)}
-                          style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
-                        >
-                          <Ionicons name="create-outline" size={18} color={C.black} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => handleDelete(date, i)}
-                          style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
-                        >
-                          <Ionicons name="trash-outline" size={18} color={C.black} />
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                          <TouchableOpacity
+                            onPress={() => openEditModal(r)}
+                            style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
+                          >
+                            <Ionicons name="create-outline" size={18} color={C.black} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteById(r.id)}
+                            style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
+                          >
+                            <Ionicons name="trash-outline" size={18} color={C.black} />
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    </View>
-                  </Swipeable>
+                    </Swipeable>
+                  </View>
                 ))}
               </View>
             );
@@ -501,28 +517,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 10,
     paddingLeft: 12,
-    paddingRight: 40, // ← クリアボタンの分を余裕もって確保
+    paddingRight: 40,
     fontSize: 16,
   },
-  // ← 縦センターで常にドンピシャ
   clearBtn: {
     position: 'absolute',
     right: 8,
     top: 0,
-    bottom: 0,            // 高さを入力と合わせる
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    width: 32,            // タップ領域を安定確保
+    width: 32,
   },
 
   // Section header
   sectionHeader: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   sectionTitle: { fontSize: 13, fontWeight: '700' },
 
-  // Record card（詳細固定）
+  // 行の外側に余白を出す（Swipeable と背景のズレ防止）
+  rowWrap: { marginHorizontal: 16, marginTop: 10 },
+
+  // Record card（← margin は外の rowWrap に移動）
   card: {
-    marginHorizontal: 16,
-    marginTop: 10,
     borderWidth: 1,
     borderRadius: 14,
     shadowOpacity: 0.12,
@@ -550,14 +566,15 @@ const styles = StyleSheet.create({
 
   iconBtn: { borderWidth: 1, borderRadius: 12, padding: 8 },
 
-  // Swipe visual background
+  // Swipe visual background（背景色＝画面背景／高さは行にフィット）
   swipeBG: {
     width: 90,
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    borderLeftWidth: 1,
     gap: 4,
+    borderTopRightRadius: 14,
+    borderBottomRightRadius: 14,
   },
   swipeActionText: { fontSize: 12, fontWeight: '700' },
 

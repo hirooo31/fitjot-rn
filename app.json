@@ -4,7 +4,7 @@
     "slug": "fitjot-rn",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png", 
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -13,15 +13,18 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.hirooo31.fitjotrn",
+      "deploymentTarget": "15.0",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
+      "package": "com.hirooo31.fitjotrn",
+      "minSdkVersion": 29,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png", 
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true
