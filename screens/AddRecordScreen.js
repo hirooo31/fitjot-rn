@@ -16,7 +16,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { saveRecord, getRecentSets, addRecentSet } from '../utils/storage';
+import { saveRecord, getRecentSets, addRecentSet, removeRecentSet } from '../utils/storage';
 
 // 控えめオレンジ（背景には使わない）
 const ACCENT = '#D46E2C';
@@ -91,7 +91,6 @@ export default function AddRecordScreen({ navigation }) {
   }, [navigation, C.text]);
 
   useEffect(() => {
-    // 画面表示時に最近のセットを読み込み
     loadRecents();
     const unsub = navigation.addListener('focus', loadRecents);
     return unsub;
@@ -102,9 +101,7 @@ export default function AddRecordScreen({ navigation }) {
     try {
       const items = await getRecentSets(12); // 最大12個を横スクロールで
       setRecents(items);
-    } catch {
-      // 読み込み失敗は黙殺（UI影響最小に）
-    }
+    } catch {}
   };
 
   const addSet = (type) => {
@@ -124,6 +121,25 @@ export default function AddRecordScreen({ navigation }) {
         ? { type, exercise: exercise ?? '', weight: weight ?? '', reps: reps ?? '', sets: cnt ?? '' }
         : { type, exercise: exercise ?? '', distance: distance ?? '', time: time ?? '', sets: cnt ?? '' };
     setSets((prev) => [...prev, base]);
+  };
+
+  const confirmDeleteRecent = (r) => {
+    const name = r?.exercise?.trim() ? r.exercise : r.type;
+    Alert.alert('削除しますか？', name, [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '削除',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await removeRecentSet(r);
+            await loadRecents();
+          } catch {
+            Alert.alert('エラー', '最近からの削除に失敗しました');
+          }
+        },
+      },
+    ]);
   };
 
   const removeSet = (idx) => setSets((prev) => prev.filter((_, i) => i !== idx));
@@ -216,6 +232,8 @@ export default function AddRecordScreen({ navigation }) {
                 <Pressable
                   key={`${r.type}-${r.exercise ?? ''}-${i}`}
                   onPress={() => addSetFromRecent(r)}
+                  onLongPress={() => confirmDeleteRecent(r)}
+                  delayLongPress={350}
                   style={({ pressed }) => [
                     styles.recentChip,
                     {
@@ -264,7 +282,7 @@ export default function AddRecordScreen({ navigation }) {
                 onPress={() => removeSet(idx)}
                 style={({ pressed }) => [
                   styles.iconBtn,
-                  { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
+                  { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : '透明' },
                 ]}
               >
                 <Ionicons name="trash-outline" size={18} color={C.sub} />

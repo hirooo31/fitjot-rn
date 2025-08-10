@@ -1,5 +1,5 @@
 // screens/HomeScreen.js
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,13 +15,17 @@ import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import dayjs from 'dayjs';
-import { getRecords, updateRecordById, deleteRecordById } from '../utils/storage';
+import { Swipeable } from 'react-native-gesture-handler';
+import { getRecords, updateRecordById, deleteRecordById, saveRecord } from '../utils/storage';
+
+// ※ 他画面と合わせてオレンジは“控えめ＆アイコン中心”の運用に
+const ACCENT = '#D46E2C';
 
 export default function HomeScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
 
-  // Design tokens (メニュー/記録画面と同トーン)
+  // Design tokens
   const C = {
     light: {
       bg: '#f6f6f6',
@@ -33,8 +37,8 @@ export default function HomeScreen() {
       inputBorder: '#dddddd',
       ghostBg: 'rgba(0,0,0,0.03)',
       black: '#111111',
-      accent: '#E87722',
-      accentSoft: 'rgba(232,119,34,0.12)',
+      accent: ACCENT,
+      accentSoft: 'rgba(212,110,44,0.12)',
       shadow: '#bdbdbd',
       danger: '#d11a2a',
     },
@@ -48,8 +52,8 @@ export default function HomeScreen() {
       inputBorder: '#2a2a2a',
       ghostBg: 'rgba(255,255,255,0.05)',
       black: '#fafafa',
-      accent: '#E87722',
-      accentSoft: 'rgba(232,119,34,0.2)',
+      accent: ACCENT,
+      accentSoft: 'rgba(212,110,44,0.2)',
       shadow: '#000000',
       danger: '#ff5f6d',
     },
@@ -60,9 +64,19 @@ export default function HomeScreen() {
   const [editRecord, setEditRecord] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Undo（最後に消したレコードを一時保持）
+  const [undo, setUndo] = useState(null); // { record }
+  const undoTimer = useRef(null);
+
   useFocusEffect(
     useCallback(() => {
       loadRecords();
+      return () => {
+        if (undoTimer.current) {
+          clearTimeout(undoTimer.current);
+          undoTimer.current = null;
+        }
+      };
     }, [searchQuery])
   );
 
@@ -75,10 +89,11 @@ export default function HomeScreen() {
         if (!grouped[date]) grouped[date] = [];
         grouped[date].push(r);
       });
-      // 日付降順 → 同日中は新しいIDから
+      // 同日内は新しいID順
       Object.keys(grouped).forEach((k) => {
         grouped[k].sort((a, b) => (a.id > b.id ? -1 : 1));
       });
+      // 日付降順
       const sorted = Object.fromEntries(
         Object.entries(grouped).sort(([a], [b]) => (a > b ? -1 : 1))
       );
@@ -88,10 +103,32 @@ export default function HomeScreen() {
     }
   };
 
+  const triggerUndo = (record) => {
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    setUndo({ record });
+    undoTimer.current = setTimeout(() => {
+      setUndo(null);
+      undoTimer.current = null;
+    }, 4000);
+  };
+
+  const undoDelete = async () => {
+    if (!undo?.record) return;
+    if (undoTimer.current) {
+      clearTimeout(undoTimer.current);
+      undoTimer.current = null;
+    }
+    const rec = undo.record;
+    setUndo(null);
+    await saveRecord(rec); // 元の id ごと復元
+    await loadRecords();
+  };
+
   const handleDelete = async (date, index) => {
     try {
       const target = groupedRecords[date][index];
       await deleteRecordById(target.id);
+      triggerUndo(target);
       await loadRecords();
     } catch {
       Alert.alert('エラー', '削除に失敗しました');
@@ -147,7 +184,8 @@ export default function HomeScreen() {
     records.some((r) => (r.exercise || '').toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const renderSubtitle = (r) => {
+  // サブタイトル（詳細固定）
+  const subVerbose = (r) => {
     if (r.type === '筋トレ') {
       const core = [r.weight ? `${r.weight}kg` : null, r.reps ? `${r.reps}回` : null]
         .filter(Boolean)
@@ -162,7 +200,16 @@ export default function HomeScreen() {
     return [core, sets].filter(Boolean).join('');
   };
 
+  const renderSubtitle = (r) => subVerbose(r);
   const isEmpty = filteredEntries.length === 0;
+
+  // 右スワイプ背景（視覚フィードバック）
+  const RightAction = () => (
+    <View style={[styles.swipeBG, { backgroundColor: C.ghostBg, borderLeftColor: C.border }]}>
+      <Ionicons name="trash-outline" size={20} color={C.black} />
+      <Text style={[styles.swipeActionText, { color: C.black }]}>削除</Text>
+    </View>
+  );
 
   return (
     <View style={[styles.screen, { backgroundColor: C.bg }]}>
@@ -190,58 +237,107 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
         {isEmpty ? (
-          // 空データ時プレースホルダ
           <View style={styles.emptyWrap}>
             <Ionicons name="server-outline" size={48} color={C.sub} />
             <Text style={[styles.emptyTitle, { color: C.sub }]}>記録はまだありません</Text>
             <Text style={[styles.emptyText, { color: C.sub }]}>別の画面から記録を追加してください</Text>
           </View>
         ) : (
-          filteredEntries.map(([date, items]) => (
-            <View key={date} style={{ marginBottom: 10 }}>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: C.sub }]}>
-                  {dayjs(date).isValid() ? dayjs(date).format('YYYY/MM/DD (ddd)') : date}
-                </Text>
-              </View>
-
-              {items.map((r, i) => (
-                <View
-                  key={r.id ?? i}
-                  style={[
-                    styles.card,
-                    { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.itemTitle, { color: C.text }]}>{r.exercise || r.type}</Text>
-                    {!!renderSubtitle(r) && (
-                      <Text style={[styles.itemSub, { color: C.sub }]}>{renderSubtitle(r)}</Text>
-                    )}
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity
-                      onPress={() => openEditModal(date, i)}
-                      style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
-                    >
-                      <Ionicons name="create-outline" size={18} color={C.black} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDelete(date, i)}
-                      style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
-                    >
-                      <Ionicons name="trash-outline" size={18} color={C.black} />
-                    </TouchableOpacity>
-                  </View>
+          filteredEntries.map(([date, items]) => {
+            const title = dayjs(date).isValid() ? dayjs(date).format('YYYY/MM/DD (ddd)') : date;
+            return (
+              <View key={date} style={{ marginBottom: 10 }}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: C.sub }]}>
+                    {title} · {items.length}件
+                  </Text>
                 </View>
-              ))}
-            </View>
-          ))
+
+                {items.map((r, i) => (
+                  <Swipeable
+                    key={r.id ?? i}
+                    friction={1.5}
+                    rightThreshold={48}
+                    overshootRight={false}
+                    renderRightActions={() => <RightAction />}
+                    onSwipeableOpen={(direction) => {
+                      if (direction === 'right') handleDelete(date, i);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.card,
+                        styles.cardRegular, // ← 詳細デザイン（ゆったりパディング）
+                        { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
+                      ]}
+                    >
+                      {/* 左：タイプアイコン（チップは詳細では非表示） */}
+                      <View style={styles.leftIconWrap}>
+                        <View
+                          style={[
+                            styles.iconCircle,
+                            { borderColor: C.border, backgroundColor: C.ghostBg },
+                          ]}
+                        >
+                          <Ionicons
+                            name={r.type === '筋トレ' ? 'barbell-outline' : 'walk-outline'}
+                            size={18}
+                            color={C.accent}
+                          />
+                        </View>
+                      </View>
+
+                      {/* 中央：タイトル + サブ（詳細表記） */}
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text
+                          style={[styles.itemTitle, { color: C.text }]}
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                        >
+                          {r.exercise || r.type}
+                        </Text>
+                        {!!renderSubtitle(r) && (
+                          <Text
+                            style={[styles.itemSub, { color: C.sub }]}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                          >
+                            {renderSubtitle(r)}
+                          </Text>
+                        )}
+                      </View>
+
+                      {/* 右：操作（編集/削除） */}
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => openEditModal(date, i)}
+                          style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
+                        >
+                          <Ionicons name="create-outline" size={18} color={C.black} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleDelete(date, i)}
+                          style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
+                        >
+                          <Ionicons name="trash-outline" size={18} color={C.black} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Swipeable>
+                ))}
+              </View>
+            );
+          })
         )}
       </ScrollView>
 
       {/* 編集モーダル */}
-      <Modal visible={editModalVisible} transparent animationType="fade" onRequestClose={() => setEditModalVisible(false)}>
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
             <Text style={[styles.modalTitle, { color: C.text }]}>記録を編集</Text>
@@ -380,6 +476,23 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Undo スナックバー */}
+      {undo && (
+        <View
+          style={[
+            styles.undoBar,
+            { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
+          ]}
+        >
+          <Text style={{ color: C.text, fontSize: 13, flex: 1 }} numberOfLines={1}>
+            削除しました
+          </Text>
+          <TouchableOpacity onPress={undoDelete} style={[styles.undoBtn, { borderColor: C.border }]}>
+            <Text style={{ color: C.text, fontWeight: '800', fontSize: 13 }}>取り消す</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -402,13 +515,12 @@ const styles = StyleSheet.create({
   sectionHeader: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   sectionTitle: { fontSize: 13, fontWeight: '700' },
 
-  // Record card
+  // Record card（詳細固定）
   card: {
     marginHorizontal: 16,
     marginTop: 10,
     borderWidth: 1,
     borderRadius: 14,
-    padding: 14,
     shadowOpacity: 0.12,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -417,11 +529,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  cardRegular: { padding: 14 },
+
+  leftIconWrap: { alignItems: 'center', gap: 6 },
+  iconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   itemTitle: { fontSize: 16, fontWeight: '700' },
-  itemSub: { marginTop: 4, fontSize: 13 },
+  itemSub: { marginTop: 2, fontSize: 13 },
+
   iconBtn: { borderWidth: 1, borderRadius: 12, padding: 8 },
 
-  // Buttons
+  // Swipe visual background
+  swipeBG: {
+    width: 90,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    gap: 4,
+  },
+  swipeActionText: { fontSize: 12, fontWeight: '700' },
+
+  // Buttons (modal footer)
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -448,7 +584,12 @@ const styles = StyleSheet.create({
   },
 
   // Modal
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modalCard: { width: '94%', borderWidth: 1, borderRadius: 20, padding: 16 },
   modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
 
@@ -462,4 +603,29 @@ const styles = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingTop: 64, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '700' },
   emptyText: { fontSize: 13 },
+
+  // Undo bar
+  undoBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  undoBtn: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
 });

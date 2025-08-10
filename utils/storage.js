@@ -130,3 +130,13 @@ export async function getRecentSets(limit = 12) {
     return [];
   }
 }
+
+// 長押し削除用：同一シグネチャの項目を削除
+export async function removeRecentSet(target) {
+  try {
+    const list = getJSON(RECENT_KEY, []);
+    const sig = recentSig(target);
+    const next = list.filter((x) => recentSig(x) !== sig);
+    setJSON(RECENT_KEY, next);
+  } catch {}
+}

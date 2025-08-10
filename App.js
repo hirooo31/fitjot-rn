@@ -2,6 +2,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './screens/HomeScreen';
 import AddRecordScreen from './screens/AddRecordScreen';
 import WeeklyMenuScreen from './screens/WeeklyMenuScreen';
@@ -12,8 +14,8 @@ import * as SplashScreen from 'expo-splash-screen';
 
 const Tab = createBottomTabNavigator();
 
-// スプラッシュを自動で消さない
-SplashScreen.preventAutoHideAsync();
+// スプラッシュを自動で消さない（警告回避のため void で呼ぶ）
+void SplashScreen.preventAutoHideAsync();
 
 export default function App() {
   const [appReady, setAppReady] = useState(false);
@@ -29,7 +31,7 @@ export default function App() {
         const elapsed = Date.now() - start;
         const wait = Math.max(0, 1500 - elapsed);
         if (wait > 0) {
-          await new Promise(res => setTimeout(res, wait));
+          await new Promise((res) => setTimeout(res, wait));
         }
       } catch (e) {
         console.warn('初期化中にエラー:', e);
@@ -39,7 +41,7 @@ export default function App() {
     })();
   }, []);
 
-  const onLayoutRootView = useCallback(async () => {
+  const onReadyHideSplash = useCallback(async () => {
     if (appReady) {
       await SplashScreen.hideAsync();
     }
@@ -51,26 +53,31 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer onReady={onLayoutRootView}>
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-          tabBarActiveTintColor: '#E87722', // オレンジ
-          tabBarInactiveTintColor: 'gray',
-          tabBarIcon: ({ color, size }) => {
-            let iconName;
-            if (route.name === '一覧') iconName = 'list';
-            else if (route.name === '記録') iconName = 'add-circle';
-            else if (route.name === 'メニュー') iconName = 'calendar';
-            else if (route.name === 'タイマー') iconName = 'timer';
-            return <Ionicons name={iconName} size={size} color={color} />;
-          },
-        })}
-      >
-        <Tab.Screen name="一覧" component={HomeScreen} />
-        <Tab.Screen name="記録" component={AddRecordScreen} />
-        <Tab.Screen name="メニュー" component={WeeklyMenuScreen} />
-        <Tab.Screen name="タイマー" component={TimerScreen} />
-      </Tab.Navigator>
-    </NavigationContainer>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <NavigationContainer onReady={onReadyHideSplash}>
+          <Tab.Navigator
+            screenOptions={({ route }) => ({
+              tabBarActiveTintColor: '#D46E2C', // 控えめオレンジ（アプリ内と統一）
+              tabBarInactiveTintColor: 'gray',
+              tabBarIcon: ({ color, size }) => {
+                let iconName;
+                if (route.name === '一覧') iconName = 'list';
+                else if (route.name === '記録') iconName = 'add-circle';
+                else if (route.name === 'メニュー') iconName = 'calendar';
+                else if (route.name === 'タイマー') iconName = 'timer';
+                return <Ionicons name={iconName} size={size} color={color} />;
+              },
+              headerTitleStyle: { fontWeight: '700' },
+            })}
+          >
+            <Tab.Screen name="一覧" component={HomeScreen} />
+            <Tab.Screen name="記録" component={AddRecordScreen} />
+            <Tab.Screen name="メニュー" component={WeeklyMenuScreen} />
+            <Tab.Screen name="タイマー" component={TimerScreen} />
+          </Tab.Navigator>
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
