@@ -1,5 +1,5 @@
 // screens/AddRecordScreen.js
-import React, { useState, useLayoutEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
-import { saveRecord } from '../utils/storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { saveRecord, getRecentSets, addRecentSet } from '../utils/storage';
 
 // 控えめオレンジ（背景には使わない）
 const ACCENT = '#D46E2C';
@@ -23,6 +24,7 @@ const ACCENT = '#D46E2C';
 export default function AddRecordScreen({ navigation }) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
+  const insets = useSafeAreaInsets();
 
   const C = {
     light: {
@@ -59,6 +61,9 @@ export default function AddRecordScreen({ navigation }) {
     },
   }[isDark ? 'dark' : 'light'];
 
+  // 下端だけ最小限の余白（バー高さ 56 + セーフエリア）
+  const bottomPad = insets.bottom + 56;
+
   const [sets, setSets] = useState([]);
   const [typeModal, setTypeModal] = useState(false);
   const [pickedDate, setPickedDate] = useState(new Date());
@@ -71,6 +76,9 @@ export default function AddRecordScreen({ navigation }) {
   const MIN_BOX = 120;
   const [typeBox, setTypeBox] = useState(MAX_BOX);
 
+  // 最近のセット
+  const [recents, setRecents] = useState([]);
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: '記録',
@@ -82,6 +90,23 @@ export default function AddRecordScreen({ navigation }) {
     });
   }, [navigation, C.text]);
 
+  useEffect(() => {
+    // 画面表示時に最近のセットを読み込み
+    loadRecents();
+    const unsub = navigation.addListener('focus', loadRecents);
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadRecents = async () => {
+    try {
+      const items = await getRecentSets(12); // 最大12個を横スクロールで
+      setRecents(items);
+    } catch {
+      // 読み込み失敗は黙殺（UI影響最小に）
+    }
+  };
+
   const addSet = (type) => {
     const base =
       type === '筋トレ'
@@ -91,9 +116,17 @@ export default function AddRecordScreen({ navigation }) {
     setTypeModal(false);
   };
 
-  const removeSet = (idx) => {
-    setSets((prev) => prev.filter((_, i) => i !== idx));
+  const addSetFromRecent = (r) => {
+    // 日付以外をそのまま差し込み
+    const { type, exercise, weight, reps, distance, time, sets: cnt } = r;
+    const base =
+      type === '筋トレ'
+        ? { type, exercise: exercise ?? '', weight: weight ?? '', reps: reps ?? '', sets: cnt ?? '' }
+        : { type, exercise: exercise ?? '', distance: distance ?? '', time: time ?? '', sets: cnt ?? '' };
+    setSets((prev) => [...prev, base]);
   };
+
+  const removeSet = (idx) => setSets((prev) => prev.filter((_, i) => i !== idx));
 
   const handleChange = (idx, field, value) => {
     setSets((prev) => {
@@ -132,7 +165,10 @@ export default function AddRecordScreen({ navigation }) {
       const dateStr = dayjs(pickedDate).format('YYYY-MM-DD');
       for (const s of sets) {
         await saveRecord({ ...s, date: dateStr });
+        // 最近リストへも追加（重複は内部で抑制）
+        await addRecentSet(s);
       }
+      await loadRecents();
       Alert.alert('保存しました', `${dayjs(pickedDate).format('M/D')}の記録として保存しました`);
       setSets([]);
     } catch (e) {
@@ -140,9 +176,73 @@ export default function AddRecordScreen({ navigation }) {
     }
   };
 
+  const renderRecentMeta = (r) => {
+    if (r.type === '筋トレ') {
+      const w = r.weight ? `${r.weight}kg` : '-';
+      const rep = r.reps ? `${r.reps}回` : '-';
+      const st = r.sets ? `${r.sets}セット` : '-';
+      return `${w}  ×  ${rep}  |  ${st}`;
+    } else {
+      const d = r.distance ? `${r.distance}km` : '-';
+      const t = r.time ? `${r.time}分` : '-';
+      const st = r.sets ? `${r.sets}セット` : '-';
+      return `${d}  |  ${t}  |  ${st}`;
+    }
+  };
+
   return (
     <View style={[styles.screen, { backgroundColor: C.bg }]}>
-      <ScrollView contentContainerStyle={{ paddingVertical: 12 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingVertical: 12, paddingBottom: bottomPad }}
+        contentInset={{ bottom: bottomPad }}
+        scrollIndicatorInsets={{ bottom: bottomPad }}
+      >
+        {/* 最近から（横スクロール） */}
+        {recents.length > 0 && (
+          <View style={styles.recentWrap}>
+            <View style={styles.recentHeader}>
+              <Text style={[styles.recentTitle, { color: C.sub }]}>最近から</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
+            >
+              {recents.map((r, i) => (
+                <Pressable
+                  key={`${r.type}-${r.exercise ?? ''}-${i}`}
+                  onPress={() => addSetFromRecent(r)}
+                  style={({ pressed }) => [
+                    styles.recentChip,
+                    {
+                      backgroundColor: pressed ? C.accentSoft : C.ghostBg,
+                      borderColor: pressed ? C.accent : C.border,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={r.type === '筋トレ' ? 'barbell-outline' : 'walk-outline'}
+                    size={18}
+                    color={ACCENT}
+                  />
+                  <View style={{ maxWidth: 180 }}>
+                    <Text numberOfLines={1} style={[styles.recentName, { color: C.text }]}>
+                      {r.exercise || '(未入力)'}
+                    </Text>
+                    <Text numberOfLines={1} style={[styles.recentMeta, { color: C.sub }]}>
+                      {renderRecentMeta(r)}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {sets.length === 0 && (
           <View style={styles.emptyWrap}>
             <Ionicons name="add-circle-outline" size={36} color={C.sub} />
@@ -157,7 +257,7 @@ export default function AddRecordScreen({ navigation }) {
           >
             <View style={styles.cardHeader}>
               <Text style={[styles.cardTitle, { color: C.text }]}>{s.type}</Text>
-              {/* 削除：テキストをやめて、ニュートラルなアイコン丸ボタン */}
+              {/* 削除：ニュートラルなアイコン丸ボタン */}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="このセットを削除"
@@ -260,7 +360,7 @@ export default function AddRecordScreen({ navigation }) {
       </ScrollView>
 
       {/* Bottom bar */}
-      <View style={[styles.bottomBar, { borderTopColor: C.border, backgroundColor: C.card }]}>
+      <View style={[styles.bottomBar, { borderTopColor: C.border, backgroundColor: C.card, paddingBottom: insets.bottom }]}>
         <Pressable
           onPress={() => {
             setTempDate(pickedDate);
@@ -268,17 +368,11 @@ export default function AddRecordScreen({ navigation }) {
           }}
           style={({ pressed }) => [
             styles.ghostBtn,
-            {
-              borderColor: C.border,
-              backgroundColor: pressed ? C.ghostBg : 'transparent',
-              minWidth: 140,
-            },
+            { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent', minWidth: 140 },
           ]}
         >
           <Ionicons name="calendar-outline" size={18} color={C.black} />
-          <Text style={[styles.ghostBtnText, { color: C.black }]}>
-            {dayjs(pickedDate).format('YYYY/MM/DD')}
-          </Text>
+          <Text style={[styles.ghostBtnText, { color: C.black }]}>{dayjs(pickedDate).format('YYYY/MM/DD')}</Text>
         </Pressable>
 
         {/* プライマリ：ニュートラル背景・アウトラインピル（文言に合わせて縮む） */}
@@ -308,13 +402,7 @@ export default function AddRecordScreen({ navigation }) {
           <Pressable style={{ flex: 1 }} onPress={() => setDateModal(false)} />
           <View
             style={[
-              {
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                borderWidth: 1,
-                paddingBottom: 16,
-                paddingTop: 6,
-              },
+              { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, paddingBottom: 16, paddingTop: 6 },
               { backgroundColor: C.card, borderColor: C.border },
             ]}
           >
@@ -333,9 +421,7 @@ export default function AddRecordScreen({ navigation }) {
             >
               <Pressable
                 onPress={() => setDateModal(false)}
-                style={({ pressed }) => [
-                  { paddingVertical: 8, paddingHorizontal: 8, opacity: pressed ? 0.7 : 1 },
-                ]}
+                style={({ pressed }) => [{ paddingVertical: 8, paddingHorizontal: 8, opacity: pressed ? 0.7 : 1 }]}
               >
                 <Text style={{ color: C.sub, fontSize: 16 }}>キャンセル</Text>
               </Pressable>
@@ -345,9 +431,7 @@ export default function AddRecordScreen({ navigation }) {
                   setPickedDate(tempDate);
                   setDateModal(false);
                 }}
-                style={({ pressed }) => [
-                  { paddingVertical: 8, paddingHorizontal: 8, opacity: pressed ? 0.7 : 1 },
-                ]}
+                style={({ pressed }) => [{ paddingVertical: 8, paddingHorizontal: 8, opacity: pressed ? 0.7 : 1 }]}
               >
                 <Text style={{ color: C.accent, fontSize: 16, fontWeight: '700' }}>完了</Text>
               </Pressable>
@@ -357,9 +441,7 @@ export default function AddRecordScreen({ navigation }) {
                 value={tempDate}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
-                // iOS: 日本語化（spinnerなら安定）
                 locale={Platform.OS === 'ios' ? 'ja-JP' : undefined}
-                // Android: ボタン文言だけ日本語に
                 {...(Platform.OS === 'android'
                   ? { positiveButton: { label: '決定' }, negativeButton: { label: 'キャンセル' } }
                   : {})}
@@ -386,7 +468,7 @@ export default function AddRecordScreen({ navigation }) {
           <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border, alignItems: 'center' }]}>
             <Text style={[styles.typeModalTitle, { color: C.text }]}>種別を選択</Text>
 
-            {/* 幅計測して2枚＋GAPが入るように自動調整 */}
+            {/* 幅を計測して 2枚 + GAP が入るように自動調整 */}
             <View
               style={styles.typeRow}
               onLayout={(e) => {
@@ -399,11 +481,7 @@ export default function AddRecordScreen({ navigation }) {
                 onPress={() => addSet('筋トレ')}
                 style={({ pressed }) => [
                   styles.typeBig,
-                  {
-                    width: typeBox,
-                    backgroundColor: pressed ? C.accentSoft : C.ghostBg,
-                    borderColor: pressed ? C.accent : C.border,
-                  },
+                  { width: typeBox, backgroundColor: pressed ? C.accentSoft : C.ghostBg, borderColor: pressed ? C.accent : C.border },
                 ]}
               >
                 <Ionicons name="barbell-outline" size={42} color={C.accent} />
@@ -414,11 +492,7 @@ export default function AddRecordScreen({ navigation }) {
                 onPress={() => addSet('有酸素')}
                 style={({ pressed }) => [
                   styles.typeBig,
-                  {
-                    width: typeBox,
-                    backgroundColor: pressed ? C.accentSoft : C.ghostBg,
-                    borderColor: pressed ? C.accent : C.border,
-                  },
+                  { width: typeBox, backgroundColor: pressed ? C.accentSoft : C.ghostBg, borderColor: pressed ? C.accent : C.border },
                 ]}
               >
                 <Ionicons name="walk-outline" size={42} color={C.accent} />
@@ -447,6 +521,22 @@ const styles = StyleSheet.create({
   emptyWrap: { padding: 28, alignItems: 'center', gap: 8 },
   emptyText: { fontSize: 16 },
 
+  // 最近
+  recentWrap: { marginBottom: 6 },
+  recentHeader: { paddingHorizontal: 16, marginBottom: 8, flexDirection: 'row', alignItems: 'center' },
+  recentTitle: { fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
+  recentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  recentName: { fontSize: 15, fontWeight: '700' },
+  recentMeta: { fontSize: 12, marginTop: 2 },
+
   card: {
     borderWidth: 1,
     borderRadius: 16,
@@ -468,7 +558,6 @@ const styles = StyleSheet.create({
   divider: { height: 1, marginVertical: 12 },
 
   // Buttons
-  // プライマリ：ニュートラル背景・アウトラインピル（文言に合わせて縮む）
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -484,7 +573,6 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { fontSize: 15, fontWeight: '700' },
 
-  // 日付のゴーストボタン（据え置き）
   ghostBtn: {
     alignItems: 'center',
     gap: 8,
@@ -496,7 +584,6 @@ const styles = StyleSheet.create({
   },
   ghostBtnText: { fontSize: 15, fontWeight: '500' },
 
-  // アイコンのみ丸ボタン（削除に使用）
   iconBtn: {
     width: 38,
     height: 38,
@@ -514,6 +601,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    minHeight: 56,
   },
 
   // Modals
@@ -538,11 +626,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 10,
   },
-  typeBigText: {
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
+  typeBigText: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   closeBtn: {
     borderWidth: 1,
     borderRadius: 999,

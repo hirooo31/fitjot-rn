@@ -13,6 +13,7 @@ import {
   Pressable,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getWeeklyMenu, saveWeeklyMenu, saveRecord } from '../utils/storage';
 
 const weekdays = ['月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日', '日曜日'];
@@ -23,6 +24,7 @@ const ACCENT = '#D46E2C';
 export default function WeeklyMenuScreen({ navigation }) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
+  const insets = useSafeAreaInsets();
 
   const C = {
     light: {
@@ -76,6 +78,9 @@ export default function WeeklyMenuScreen({ navigation }) {
   // 曜日ドット（1行7個）の自動サイズ
   const [weekDot, setWeekDot] = useState(44);
   const [weekGap, setWeekGap] = useState(10);
+
+  // 下余白は常に一定（キーボード有無によらず 56px + セーフエリア）
+  const bottomPad = insets.bottom + 56;
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -157,7 +162,6 @@ export default function WeeklyMenuScreen({ navigation }) {
     if (/^\d*$/.test(value)) handleChange(day, index, field, value);
   };
 
-  // 「セットを追加」時にも筋トレ/有酸素を選べるように
   const handleAddSet = (day) => {
     setSelectedDay(day);
     setTypeContext('add-set');
@@ -220,196 +224,205 @@ export default function WeeklyMenuScreen({ navigation }) {
   };
 
   return (
-    <ScrollView style={[styles.screen, { backgroundColor: C.bg }]}>
-      {Object.entries(menu).length === 0 && (
-        <View style={styles.emptyWrap}>
-          <Text style={[styles.emptyText, { color: C.sub }]}>＋ で曜日を追加</Text>
-        </View>
-      )}
-
-      {Object.entries(menu).map(([day, sets]) => (
-        <View
-          key={day}
-          style={[
-            styles.card,
-            { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
-          ]}
-        >
-          <View style={styles.cardHeader}>
-            <Text style={[styles.cardTitle, { color: C.text }]}>{day}</Text>
-
-            {/* アクション：右寄せ。削除はニュートラルなアイコンのみ */}
-            <View style={styles.actions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${day}を記録`}
-                onPress={() => handleSubmitDay(day)}
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  {
-                    backgroundColor: pressed ? C.neutralBtnBgPressed : C.neutralBtnBg,
-                    borderColor: C.border,
-                    shadowColor: C.shadow,
-                    transform: [{ translateY: pressed ? 1 : 0 }],
-                  },
-                ]}
-              >
-                {/* アイコンのみオレンジ */}
-                <Ionicons name="document-text-outline" size={18} color={C.accent} />
-                <Text style={[styles.primaryBtnText, { color: C.text }]}>記録</Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${day}を削除`}
-                onPress={() => handleRemoveDay(day)}
-                style={({ pressed }) => [
-                  styles.iconBtn,
-                  {
-                    borderColor: C.border,
-                    backgroundColor: pressed ? C.ghostBg : 'transparent',
-                  },
-                ]}
-              >
-                <Ionicons name="trash-outline" size={18} color={C.sub} />
-              </Pressable>
-            </View>
+    <View style={[styles.screen, { backgroundColor: C.bg }]}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        // 横は触らず、縦だけ最小限の余白を確保
+        contentContainerStyle={{ paddingTop: 12, paddingBottom: bottomPad }}
+        contentInset={{ bottom: bottomPad }}
+        scrollIndicatorInsets={{ bottom: bottomPad }}
+      >
+        {Object.entries(menu).length === 0 && (
+          <View style={styles.emptyWrap}>
+            <Text style={[styles.emptyText, { color: C.sub }]}>＋ で曜日を追加</Text>
           </View>
+        )}
 
-          <View style={[styles.divider, { backgroundColor: C.border }]} />
-
-          {sets.map((set, idx) => (
-            <View key={idx} style={styles.setRow}>
-              <View style={styles.setHeader}>
-                <Text style={[styles.setType, { color: C.sub }]}>{set.type}</Text>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="このセットを削除"
-                  onPress={() => handleRemoveSet(day, idx)}
-                  style={({ pressed }) => [
-                    styles.rowIconBtn,
-                    { backgroundColor: pressed ? C.ghostBg : 'transparent' },
-                  ]}
-                >
-                  <Ionicons name="close" size={18} color={C.sub} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.formGrid}>
-                <View style={styles.field}>
-                  <Text style={[styles.label, { color: C.sub }]}>種目</Text>
-                  <TextInput
-                    placeholder={set.type === '筋トレ' ? '例: ベンチプレス' : '例: ランニング'}
-                    placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                    value={set.exercise}
-                    onChangeText={(v) => handleChange(day, idx, 'exercise', v)}
-                    style={[
-                      styles.input,
-                      { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                    ]}
-                    returnKeyType="done"
-                  />
-                </View>
-
-                {set.type === '筋トレ' ? (
-                  <>
-                    <View style={styles.field}>
-                      <Text style={[styles.label, { color: C.sub }]}>重さ(kg)</Text>
-                      <TextInput
-                        placeholder="60"
-                        placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                        value={set.weight}
-                        onChangeText={(v) => handleNumericInput(day, idx, 'weight', v)}
-                        keyboardType="numeric"
-                        style={[
-                          styles.input,
-                          { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                        ]}
-                        returnKeyType="done"
-                      />
-                    </View>
-                    <View style={styles.field}>
-                      <Text style={[styles.label, { color: C.sub }]}>回数</Text>
-                      <TextInput
-                        placeholder="10"
-                        placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                        value={set.reps}
-                        onChangeText={(v) => handleNumericInput(day, idx, 'reps', v)}
-                        keyboardType="numeric"
-                        style={[
-                          styles.input,
-                          { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                        ]}
-                        returnKeyType="done"
-                      />
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.field}>
-                      <Text style={[styles.label, { color: C.sub }]}>距離(km)</Text>
-                      <TextInput
-                        placeholder="5"
-                        placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                        value={set.distance}
-                        onChangeText={(v) => handleNumericInput(day, idx, 'distance', v)}
-                        keyboardType="numeric"
-                        style={[
-                          styles.input,
-                          { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                        ]}
-                        returnKeyType="done"
-                      />
-                    </View>
-                    <View style={styles.field}>
-                      <Text style={[styles.label, { color: C.sub }]}>時間(分)</Text>
-                      <TextInput
-                        placeholder="30"
-                        placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                        value={set.time}
-                        onChangeText={(v) => handleNumericInput(day, idx, 'time', v)}
-                        keyboardType="numeric"
-                        style={[
-                          styles.input,
-                          { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                        ]}
-                        returnKeyType="done"
-                      />
-                    </View>
-                  </>
-                )}
-
-                <View style={styles.field}>
-                  <Text style={[styles.label, { color: C.sub }]}>セット数</Text>
-                  <TextInput
-                    placeholder="3"
-                    placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                    value={set.sets}
-                    onChangeText={(v) => handleNumericInput(day, idx, 'sets', v)}
-                    keyboardType="numeric"
-                    style={[
-                      styles.input,
-                      { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                    ]}
-                    returnKeyType="done"
-                  />
-                </View>
-              </View>
-            </View>
-          ))}
-
-          <Pressable
-            onPress={() => handleAddSet(day)}
-            style={({ pressed }) => [
-              styles.addSetBtn,
-              { backgroundColor: C.ghostBg, borderColor: C.border, opacity: pressed ? 0.92 : 1 },
+        {Object.entries(menu).map(([day, sets]) => (
+          <View
+            key={day}
+            style={[
+              styles.card,
+              { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
             ]}
           >
-            <Ionicons name="add" size={18} color={C.text} />
-            <Text style={[styles.addSetText, { color: C.text }]}>セットを追加</Text>
-          </Pressable>
-        </View>
-      ))}
+            <View style={styles.cardHeader}>
+              <Text style={[styles.cardTitle, { color: C.text }]}>{day}</Text>
+
+              {/* アクション：右寄せ。削除はニュートラルなアイコンのみ */}
+              <View style={styles.actions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${day}を記録`}
+                  onPress={() => handleSubmitDay(day)}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    {
+                      backgroundColor: pressed ? C.neutralBtnBgPressed : C.neutralBtnBg,
+                      borderColor: C.border,
+                      shadowColor: C.shadow,
+                      transform: [{ translateY: pressed ? 1 : 0 }],
+                    },
+                  ]}
+                >
+                  {/* アイコンのみオレンジ */}
+                  <Ionicons name="document-text-outline" size={18} color={C.accent} />
+                  <Text style={[styles.primaryBtnText, { color: C.text }]}>記録</Text>
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${day}を削除`}
+                  onPress={() => handleRemoveDay(day)}
+                  style={({ pressed }) => [
+                    styles.iconBtn,
+                    { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
+                  ]}
+                >
+                  <Ionicons name="trash-outline" size={18} color={C.sub} />
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: C.border }]} />
+
+            {sets.map((set, idx) => (
+              <View key={idx} style={styles.setRow}>
+                <View style={styles.setHeader}>
+                  <Text style={[styles.setType, { color: C.sub }]}>{set.type}</Text>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="このセットを削除"
+                    onPress={() => handleRemoveSet(day, idx)}
+                    style={({ pressed }) => [
+                      styles.rowIconBtn,
+                      { backgroundColor: pressed ? C.ghostBg : 'transparent' },
+                    ]}
+                  >
+                    <Ionicons name="close" size={18} color={C.sub} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.formGrid}>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: C.sub }]}>種目</Text>
+                    <TextInput
+                      placeholder={set.type === '筋トレ' ? '例: ベンチプレス' : '例: ランニング'}
+                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                      value={set.exercise}
+                      onChangeText={(v) => handleChange(day, idx, 'exercise', v)}
+                      style={[
+                        styles.input,
+                        { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                      ]}
+                      returnKeyType="done"
+                    />
+                  </View>
+
+                  {set.type === '筋トレ' ? (
+                    <>
+                      <View style={styles.field}>
+                        <Text style={[styles.label, { color: C.sub }]}>重さ(kg)</Text>
+                        <TextInput
+                          placeholder="60"
+                          placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                          value={set.weight}
+                          onChangeText={(v) => handleNumericInput(day, idx, 'weight', v)}
+                          keyboardType="numeric"
+                          style={[
+                            styles.input,
+                            { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                          ]}
+                          returnKeyType="done"
+                        />
+                      </View>
+                      <View style={styles.field}>
+                        <Text style={[styles.label, { color: C.sub }]}>回数</Text>
+                        <TextInput
+                          placeholder="10"
+                          placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                          value={set.reps}
+                          onChangeText={(v) => handleNumericInput(day, idx, 'reps', v)}
+                          keyboardType="numeric"
+                          style={[
+                            styles.input,
+                            { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                          ]}
+                          returnKeyType="done"
+                        />
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.field}>
+                        <Text style={[styles.label, { color: C.sub }]}>距離(km)</Text>
+                        <TextInput
+                          placeholder="5"
+                          placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                          value={set.distance}
+                          onChangeText={(v) => handleNumericInput(day, idx, 'distance', v)}
+                          keyboardType="numeric"
+                          style={[
+                            styles.input,
+                            { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                          ]}
+                          returnKeyType="done"
+                        />
+                      </View>
+                      <View style={styles.field}>
+                        <Text style={[styles.label, { color: C.sub }]}>時間(分)</Text>
+                        <TextInput
+                          placeholder="30"
+                          placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                          value={set.time}
+                          onChangeText={(v) => handleNumericInput(day, idx, 'time', v)}
+                          keyboardType="numeric"
+                          style={[
+                            styles.input,
+                            { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                          ]}
+                          returnKeyType="done"
+                        />
+                      </View>
+                    </>
+                  )}
+
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: C.sub }]}>セット数</Text>
+                    <TextInput
+                      placeholder="3"
+                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                      value={set.sets}
+                      onChangeText={(v) => handleNumericInput(day, idx, 'sets', v)}
+                      keyboardType="numeric"
+                      style={[
+                        styles.input,
+                        { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
+                      ]}
+                      returnKeyType="done"
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            <Pressable
+              onPress={() => handleAddSet(day)}
+              style={({ pressed }) => [
+                styles.addSetBtn,
+                { backgroundColor: C.ghostBg, borderColor: C.border, opacity: pressed ? 0.92 : 1 },
+              ]}
+            >
+              <Ionicons name="add" size={18} color={C.text} />
+              <Text style={[styles.addSetText, { color: C.text }]}>セットを追加</Text>
+            </Pressable>
+          </View>
+        ))}
+      </ScrollView>
 
       {/* 曜日選択（1行ドット） */}
       <Modal visible={weekdayModal} transparent animationType="fade" onRequestClose={() => setWeekdayModal(false)}>
@@ -453,7 +466,7 @@ export default function WeeklyMenuScreen({ navigation }) {
               onPress={() => setWeekdayModal(false)}
               style={({ pressed }) => [
                 styles.closeBtn,
-                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
+                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : '透明' },
               ]}
             >
               <Text style={{ color: C.text, fontSize: 16, fontWeight: '600' }}>閉じる</Text>
@@ -503,7 +516,7 @@ export default function WeeklyMenuScreen({ navigation }) {
               onPress={() => setTypeModal(false)}
               style={({ pressed }) => [
                 styles.closeBtn,
-                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
+                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : '透明' },
               ]}
             >
               <Text style={{ color: C.text, fontSize: 16, fontWeight: '600' }}>閉じる</Text>
@@ -511,7 +524,7 @@ export default function WeeklyMenuScreen({ navigation }) {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -538,8 +551,7 @@ const styles = StyleSheet.create({
   // アクション少しだけ詰める
   actions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
 
-  // NEW: プライマリ（ニュートラル背景のアウトライン・ピル）
-  // 文字数に合わせて縮む：minWidthを設定しない＆パディング控えめ
+  // プライマリ（ニュートラル背景のアウトライン・ピル）
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -554,19 +566,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
   },
   primaryBtnText: { fontSize: 15, fontWeight: '700' },
-
-  // 既存の汎用ゴースト（残し）
-  ghostBtn: {
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 14,
-    borderWidth: 0.8,
-    minWidth: 104,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
 
   // ニュートラルなアイコン丸ボタン（削除用）
   iconBtn: {
