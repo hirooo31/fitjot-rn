@@ -277,7 +277,7 @@ export default function AddRecordScreen({ navigation }) {
         >
           <Ionicons name="calendar-outline" size={18} color={C.black} />
           <Text style={[styles.ghostBtnText, { color: C.black }]}>
-            日付: {dayjs(pickedDate).format('YYYY/MM/DD')}
+            {dayjs(pickedDate).format('YYYY/MM/DD')}
           </Text>
         </Pressable>
 
@@ -357,6 +357,12 @@ export default function AddRecordScreen({ navigation }) {
                 value={tempDate}
                 mode="date"
                 display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+                // iOS: 日本語化（spinnerなら安定）
+                locale={Platform.OS === 'ios' ? 'ja-JP' : undefined}
+                // Android: ボタン文言だけ日本語に
+                {...(Platform.OS === 'android'
+                  ? { positiveButton: { label: '決定' }, negativeButton: { label: 'キャンセル' } }
+                  : {})}
                 onChange={(e, d) => {
                   if (Platform.OS === 'ios') {
                     if (d) setTempDate(d);
