@@ -174,6 +174,18 @@ export default function TimerScreen({ navigation }) {
   };
   const plusSign = (n) => (n >= 0 ? `+${mmss(n)}` : `-${mmss(Math.abs(n))}`);
 
+  // 選択系の軽いハプティック（ホイール用）
+  const selectionTick = async () => {
+    try {
+      const H = await import('expo-haptics');
+      if (Platform.OS === 'android') {
+        await H.impactAsync(H.ImpactFeedbackStyle.Light);
+      } else {
+        await H.selectionAsync();
+      }
+    } catch {}
+  };
+
   const scheduleFinishNotification = async (endAtMs) => {
     try {
       const seconds = Math.max(1, Math.ceil((endAtMs - Date.now()) / 1000));
@@ -379,6 +391,21 @@ export default function TimerScreen({ navigation }) {
   const [slotM, setSlotM] = useState(1);
   const [slotS, setSlotS] = useState(30);
 
+  // モーダルのスライド演出（より大胆に中央までせり上げる）
+  const slideY = useRef(new Animated.Value(400)).current;
+  useEffect(() => {
+    if (sheetVisible) {
+      Animated.timing(slideY, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      slideY.setValue(400);
+    }
+  }, [sheetVisible, slideY]);
+
   const openSheetApply = () => {
     setSheetMode('apply');
     const base = mode === 'countdown' ? (running ? remainSec : durationSec) : elapsedSec;
@@ -447,9 +474,9 @@ export default function TimerScreen({ navigation }) {
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  // Wheel（依存なし）
-  const ITEM_H = 44;
-  const VISIBLE = 5;
+  // Wheel（依存なし） + スクロール時のハプティック
+  const ITEM_H = 52;
+  const VISIBLE = 7;
   const WHEEL_H = ITEM_H * VISIBLE;
   const hours = useMemo(() => Array.from({ length: 10 }, (_, i) => i), []);
   const minutes = useMemo(() => Array.from({ length: 60 }, (_, i) => i), []);
@@ -457,17 +484,32 @@ export default function TimerScreen({ navigation }) {
 
   const Wheel = ({ value, onChange, range, pad, width = 72 }) => {
     const ref = useRef(null);
+    const lastIdxRef = useRef(-1);    // 直近の目盛り
+    const aligningRef = useRef(false); // 初期アライン中フラグ
+
     const indexOf = (v) => Math.max(0, Math.min(range.length - 1, range.indexOf(v)));
     const align = () => {
       const idx = indexOf(value);
+      aligningRef.current = true; // 初期合わせ中は鳴らさない
       ref.current?.scrollTo({ y: idx * ITEM_H, animated: false });
+      lastIdxRef.current = idx;
+      setTimeout(() => { aligningRef.current = false; }, 30);
     };
-    useEffect(() => { if (sheetVisible) setTimeout(align, 0); }, [sheetVisible]);
+    useEffect(() => { if (sheetVisible) setTimeout(align, 0); }, [sheetVisible, value]);
 
     const onSnap = (e) => {
       const y = e?.nativeEvent?.contentOffset?.y || 0;
       const idx = Math.max(0, Math.min(range.length - 1, Math.round(y / ITEM_H)));
       onChange(range[idx]);
+    };
+
+    const onScrollTick = (e) => {
+      const y = e?.nativeEvent?.contentOffset?.y ?? 0;
+      const idx = Math.max(0, Math.min(range.length - 1, Math.round(y / ITEM_H)));
+      if (!aligningRef.current && idx !== lastIdxRef.current) {
+        lastIdxRef.current = idx;
+        selectionTick(); // ← タタタ…
+      }
     };
 
     return (
@@ -477,6 +519,8 @@ export default function TimerScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
           snapToInterval={ITEM_H}
           decelerationRate="fast"
+          scrollEventThrottle={16}
+          onScroll={onScrollTick}
           onMomentumScrollEnd={onSnap}
           onScrollEndDrag={onSnap}
           contentContainerStyle={{ paddingVertical: (WHEEL_H - ITEM_H) / 2 }}
@@ -816,10 +860,15 @@ export default function TimerScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* iOS風ホイール・シート */}
+      {/* iOS風ホイール・シート（大胆に中央までせり上げ、スライド演出） */}
       <Modal visible={sheetVisible} transparent animationType="fade" onRequestClose={closeSheet}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.sheet, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Animated.View
+            style={[
+              styles.sheet,
+              { backgroundColor: C.card, borderColor: C.border, transform: [{ translateY: slideY }], paddingBottom: Math.max(12, insets.bottom) },
+            ]}
+          >
             {/* ツールバー（iOS風） */}
             <View style={[styles.toolbar, { borderColor: C.border }]}>
               <Pressable onPress={closeSheet} style={({ pressed }) => [styles.tbBtn, { opacity: pressed ? 0.6 : 1 }]}>
@@ -877,7 +926,7 @@ export default function TimerScreen({ navigation }) {
                 <Text style={{ color: isDark ? '#ff7b8b' : '#d11a2a', fontWeight: '700' }}>このプリセットを削除</Text>
               </Pressable>
             )}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </View>
@@ -1017,6 +1066,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     borderWidth: 1,
     paddingBottom: 12,
+    height: '80%', // ← 80%まで拡大
   },
   toolbar: {
     flexDirection: 'row',
