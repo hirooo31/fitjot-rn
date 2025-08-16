@@ -27,7 +27,9 @@
     "expo-splash-screen": "~0.30.10",
     "react-native-gesture-handler": "~2.24.0",
     "expo-haptics": "~14.1.4",
-    "expo-keep-awake": "~14.1.4"
+    "expo-keep-awake": "~14.1.4",
+    "expo-notifications": "~0.31.4",
+    "expo-linear-gradient": "~14.1.5"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0"
