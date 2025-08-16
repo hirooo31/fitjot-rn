@@ -19,13 +19,13 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from '@react-navigation/native';
 import { setShowTimerFinishBannerInForeground } from '../utils/notifyPolicy';
+import { getSettings } from '../utils/storage';
 
 export default function TimerScreen({ navigation }) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const insets = useSafeAreaInsets();
 
-  // === Palette（他画面と統一） ===
   const C = {
     light: {
       bg: '#F6F6F6',
@@ -57,20 +57,34 @@ export default function TimerScreen({ navigation }) {
     },
   }[isDark ? 'dark' : 'light'];
 
-  // ===== States =====
-  const [mode, setMode] = useState('countdown'); // countdown | stopwatch
+  // ==== states ====
+  const [mode, setMode] = useState('countdown');
   const [durationSec, setDurationSec] = useState(90);
   const [remainSec, setRemainSec] = useState(90);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [running, setRunning] = useState(false);
-  const [laps, setLaps] = useState([]); // [{timeSec, diffSec}... 先頭が最新]
+  const [laps, setLaps] = useState([]);
 
   const endAtRef = useRef(null);
   const startAtRef = useRef(null);
   const intervalRef = useRef(null);
   const notifIdRef = useRef(null);
 
-  // バイブON/OFF（右上トグル）
+  // 背景画像の有無（カード外UIの不透明化に使用）
+  const [hasBg, setHasBg] = useState(false);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const s = await getSettings();
+        setHasBg(!!s?.backgroundImageUri);
+      } catch {}
+    };
+    load();
+    const unsub = navigation.addListener('focus', load);
+    return unsub;
+  }, [navigation]);
+
+  // バイブ ON/OFF
   const [vibrateOnFinish, setVibrateOnFinish] = useState(true);
   const toggleAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -92,7 +106,7 @@ export default function TimerScreen({ navigation }) {
     { label: '5:00', sec: 300 },
   ]);
 
-  // 進捗（カウントダウン時のみ）
+  // 進捗
   const rawProgress = useMemo(() => {
     if (mode !== 'countdown' || durationSec <= 0) return 0;
     return Math.min(1, Math.max(0, 1 - remainSec / durationSec));
@@ -108,7 +122,7 @@ export default function TimerScreen({ navigation }) {
   }, [rawProgress]);
   const progressWidth = progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 
-  // 稼働中はスリープしない
+  // スリープ抑止
   useEffect(() => {
     let on = false;
     (async () => {
@@ -130,7 +144,7 @@ export default function TimerScreen({ navigation }) {
     };
   }, [running]);
 
-  // この画面表示中は前景バナー抑止（他画面/背景でバナー）
+  // フォアグラウンド通知抑止
   useFocusEffect(
     useCallback(() => {
       setShowTimerFinishBannerInForeground(false);
@@ -138,7 +152,7 @@ export default function TimerScreen({ navigation }) {
     }, [])
   );
 
-  // 通知チャネル & 権限
+  // 通知
   useEffect(() => {
     (async () => {
       try {
@@ -165,7 +179,7 @@ export default function TimerScreen({ navigation }) {
     navigation?.setOptions?.({ headerTitle: 'タイマー' });
   }, [navigation]);
 
-  // ===== Helpers =====
+  // ===== helpers =====
   const mmss = (sec) => {
     const s = Math.max(0, Math.floor(sec));
     const m = Math.floor(s / 60);
@@ -174,15 +188,11 @@ export default function TimerScreen({ navigation }) {
   };
   const plusSign = (n) => (n >= 0 ? `+${mmss(n)}` : `-${mmss(Math.abs(n))}`);
 
-  // 選択系の軽いハプティック（ホイール用）
   const selectionTick = async () => {
     try {
       const H = await import('expo-haptics');
-      if (Platform.OS === 'android') {
-        await H.impactAsync(H.ImpactFeedbackStyle.Light);
-      } else {
-        await H.selectionAsync();
-      }
+      if (Platform.OS === 'android') await H.impactAsync(H.ImpactFeedbackStyle.Light);
+      else await H.selectionAsync();
     } catch {}
   };
 
@@ -239,7 +249,7 @@ export default function TimerScreen({ navigation }) {
     } catch {}
   };
 
-  // ===== Engine =====
+  // ==== engine ====
   const clearTimerInterval = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -277,7 +287,6 @@ export default function TimerScreen({ navigation }) {
     return clearTimerInterval;
   }, [running, mode, vibrateOnFinish]);
 
-  // 既存 start/pause/reset は残す（手動操作用）
   const start = () => {
     if (running) return;
     if (mode === 'countdown') {
@@ -316,7 +325,7 @@ export default function TimerScreen({ navigation }) {
       endAtRef.current = null;
     } else {
       setElapsedSec(0);
-      setLaps([]); // ストップウォッチのラップもリセット
+      setLaps([]);
       startAtRef.current = null;
     }
     haptic('light');
@@ -331,7 +340,7 @@ export default function TimerScreen({ navigation }) {
       setRemainSec(durationSec);
     } else {
       setElapsedSec(0);
-      setLaps([]); // モード切替でラップクリア
+      setLaps([]);
     }
     startAtRef.current = null;
     endAtRef.current = null;
@@ -357,7 +366,7 @@ export default function TimerScreen({ navigation }) {
     haptic('light');
   };
 
-  // ===== 強制リスタート用ユーティリティ =====
+  // 強制開始
   const forceStartCountdown = (sec) => {
     setRunning(false);
     clearTimerInterval();
@@ -370,20 +379,19 @@ export default function TimerScreen({ navigation }) {
     setRunning(true);
     haptic('med');
   };
-
   const forceStartStopwatchFrom = (sec) => {
     setRunning(false);
     clearTimerInterval();
     cancelFinishNotification();
     setMode('stopwatch');
     setElapsedSec(sec);
-    setLaps([]); // 値から開始するときはラップを初期化
+    setLaps([]);
     startAtRef.current = Date.now() - sec * 1000;
     setRunning(true);
     haptic('med');
   };
 
-  // ====== iOS風 スロットピッカー（時間/分/秒） & プリセット編集 ======
+  // ==== iOS風 picker & preset ====
   const [sheetVisible, setSheetVisible] = useState(false);
   const [sheetMode, setSheetMode] = useState('apply'); // 'apply' | 'add' | 'edit'
   const [editIndex, setEditIndex] = useState(null);
@@ -391,7 +399,6 @@ export default function TimerScreen({ navigation }) {
   const [slotM, setSlotM] = useState(1);
   const [slotS, setSlotS] = useState(30);
 
-  // モーダルのスライド演出（より大胆に中央までせり上げる）
   const slideY = useRef(new Animated.Value(400)).current;
   useEffect(() => {
     if (sheetVisible) {
@@ -433,7 +440,6 @@ export default function TimerScreen({ navigation }) {
   };
   const closeSheet = () => setSheetVisible(false);
 
-  // 確定時：常に即反映＆開始
   const confirmSheet = () => {
     const total = Math.max(1, slotH * 3600 + slotM * 60 + slotS);
     if (sheetMode === 'add') {
@@ -454,7 +460,6 @@ export default function TimerScreen({ navigation }) {
     if (mode === 'countdown') {
       forceStartCountdown(total);
     } else {
-      // stopwatch モードのときは経過から開始
       forceStartStopwatchFrom(total);
     }
   };
@@ -474,7 +479,7 @@ export default function TimerScreen({ navigation }) {
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  // Wheel（依存なし） + スクロール時のハプティック
+  // Wheel
   const ITEM_H = 52;
   const VISIBLE = 7;
   const WHEEL_H = ITEM_H * VISIBLE;
@@ -484,13 +489,13 @@ export default function TimerScreen({ navigation }) {
 
   const Wheel = ({ value, onChange, range, pad, width = 72 }) => {
     const ref = useRef(null);
-    const lastIdxRef = useRef(-1);    // 直近の目盛り
-    const aligningRef = useRef(false); // 初期アライン中フラグ
+    const lastIdxRef = useRef(-1);
+    const aligningRef = useRef(false);
 
     const indexOf = (v) => Math.max(0, Math.min(range.length - 1, range.indexOf(v)));
     const align = () => {
       const idx = indexOf(value);
-      aligningRef.current = true; // 初期合わせ中は鳴らさない
+      aligningRef.current = true;
       ref.current?.scrollTo({ y: idx * ITEM_H, animated: false });
       lastIdxRef.current = idx;
       setTimeout(() => { aligningRef.current = false; }, 30);
@@ -508,7 +513,7 @@ export default function TimerScreen({ navigation }) {
       const idx = Math.max(0, Math.min(range.length - 1, Math.round(y / ITEM_H)));
       if (!aligningRef.current && idx !== lastIdxRef.current) {
         lastIdxRef.current = idx;
-        selectionTick(); // ← タタタ…
+        selectionTick();
       }
     };
 
@@ -537,7 +542,6 @@ export default function TimerScreen({ navigation }) {
           })}
         </ScrollView>
 
-        {/* selection band */}
         <View
           pointerEvents="none"
           style={{
@@ -556,11 +560,11 @@ export default function TimerScreen({ navigation }) {
     );
   };
 
-  // ===== Lap: ストップウォッチ専用 =====
+  // Lap
   const addLap = () => {
     const t = elapsedSec;
     setLaps((prev) => {
-      const lastTime = prev.length ? prev[0].timeSec : 0; // 先頭が最新
+      const lastTime = prev.length ? prev[0].timeSec : 0;
       const diff = t - lastTime;
       return [{ timeSec: t, diffSec: Math.max(0, diff) }, ...prev];
     });
@@ -568,7 +572,6 @@ export default function TimerScreen({ navigation }) {
   };
   const clearLaps = () => setLaps([]);
 
-  // ===== UI bits =====
   const pressFx = (pressed) => ({
     transform: [{ scale: pressed ? 0.98 : 1 }, { translateY: pressed ? 1 : 0 }],
   });
@@ -593,33 +596,30 @@ export default function TimerScreen({ navigation }) {
     );
   };
 
-  // ===== Render =====
+  // ==== render ====
   return (
-    <View style={[styles.screen, { backgroundColor: C.bg }]}>
+    <View style={[styles.screen, { backgroundColor: hasBg ? 'transparent' : C.bg }]}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        {/* ヘッダー行：モード切替 / 通知トグル */}
+        {/* Header: モード切替 / 通知トグル（背景あり時は不透明） */}
         <View style={{ paddingHorizontal: 16, paddingTop: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             {[
-              { key: 'countdown', icon: 'hourglass', label: 'カウント' },
-              { key: 'stopwatch', icon: 'stopwatch', label: '計測' },
+              { key: 'countdown', icon: 'hourglass' },
+              { key: 'stopwatch', icon: 'stopwatch' },
             ].map((opt) => {
               const active = mode === opt.key;
+              const chipBg = hasBg ? C.card : active ? C.accentSoft : C.ghostBg;
               return (
                 <Pressable
                   key={opt.key}
                   onPress={() => onSwitchMode(opt.key)}
                   style={({ pressed }) => [
                     styles.iconChip,
-                    {
-                      borderColor: active ? C.accent : C.border,
-                      backgroundColor: active ? C.accentSoft : C.ghostBg,
-                      ...pressFx(pressed),
-                    },
+                    { borderColor: active ? C.accent : C.border, backgroundColor: hasBg ? C.card : chipBg, ...pressFx(pressed) },
                   ]}
                 >
                   <Ionicons name={opt.icon} size={16} color={active ? C.accent : C.sub} />
@@ -633,37 +633,43 @@ export default function TimerScreen({ navigation }) {
             style={({ pressed }) => [
               styles.toggleWrap,
               {
-                backgroundColor: vibrateOnFinish ? C.accentSoft : C.ghostBg,
+                backgroundColor: hasBg ? C.card : (vibrateOnFinish ? C.accentSoft : C.ghostBg),
                 borderColor: vibrateOnFinish ? C.accent : C.border,
                 ...pressFx(pressed),
               },
             ]}
           >
-            <Animated.View
-              style={{
-                width: 24,
-                height: 24,
-                borderRadius: 999,
-                backgroundColor: '#fff',
-                transform: [{ translateX: knobX }],
-              }}
-            />
+            {/* ← アイコンを先に描画（ノブが前面に来る） */}
             <Ionicons
-              name={vibrateOnFinish ? 'notifications' : 'notifications-off'}
+              name="notifications"
               size={14}
-              color={vibrateOnFinish ? C.accent : C.sub}
-              style={{ position: 'absolute', left: 8, top: 6 }}
+              color={vibrateOnFinish ? C.accent : 'transparent'}
+              style={{ position: 'absolute', left: 8, top: 6, zIndex: 1 }}
             />
             <Ionicons
               name="notifications-off"
               size={14}
               color={vibrateOnFinish ? 'transparent' : C.sub}
-              style={{ position: 'absolute', right: 8, top: 6 }}
+              style={{ position: 'absolute', right: 8, top: 6, zIndex: 1 }}
+            />
+            {/* ノブは最後に & 最前面 */}
+            <Animated.View
+              style={{
+                position: 'absolute',
+                top: 2,
+                left: 0,
+                width: 24,
+                height: 24,
+                borderRadius: 999,
+                backgroundColor: '#fff',
+                transform: [{ translateX: knobX }],
+                zIndex: 2,
+              }}
             />
           </Pressable>
         </View>
 
-        {/* メインカード */}
+        {/* メインカード（不透明） */}
         <View
           style={[
             styles.card,
@@ -740,7 +746,7 @@ export default function TimerScreen({ navigation }) {
             </Pressable>
           </View>
 
-          {/* ±クイック（カウントダウンのみ） */}
+          {/* ±クイック */}
           {mode === 'countdown' && (
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
               {[-10, +10, +30].map((d) => (
@@ -760,7 +766,7 @@ export default function TimerScreen({ navigation }) {
             </View>
           )}
 
-          {/* 現在ターゲット（ストップウォッチでは経過表示なので省略可。統一で残す） */}
+          {/* ターゲット表示 */}
           <View style={{ alignItems: 'center', marginTop: 12 }}>
             <View style={[styles.nowPill, { borderColor: C.border, backgroundColor: C.ghostBg }]}>
               <Ionicons name="time-outline" size={14} color={C.sub} />
@@ -771,41 +777,40 @@ export default function TimerScreen({ navigation }) {
           </View>
         </View>
 
-        {/* 下部領域：カウントダウン＝プリセット / ストップウォッチ＝ラップ一覧 */}
+        {/* 下部：プリセット or ラップ（背景あり時はプリセット群も不透明） */}
         <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
           {mode === 'countdown' ? (
             <View style={styles.presetWrap}>
-              {/* 追加（小さな丸ボタン） */}
+              {/* 追加ボタン */}
               <Pressable
                 onPress={openSheetAddPreset}
                 style={({ pressed }) => [
                   styles.presetAdd,
                   {
                     borderColor: C.accent,
-                    backgroundColor: pressed ? C.accentSoft : 'transparent',
+                    backgroundColor: hasBg ? C.card : (pressed ? C.accentSoft : 'transparent'),
+                    ...pressFx(pressed),
                   },
                 ]}
               >
                 <Ionicons name="add" size={18} color={C.accent} />
               </Pressable>
 
-              {/* Chips */}
+              {/* プリセットチップ */}
               {presets.map((p, idx) => {
                 const active = mode === 'countdown' && durationSec === p.sec;
                 return (
                   <Pressable
                     key={`${p.sec}-${p.label}`}
-                    onPress={() => {
-                      // 即反映してカウントダウン開始
-                      forceStartCountdown(p.sec);
-                    }}
+                    onPress={() => { forceStartCountdown(p.sec); }}
                     onLongPress={() => openSheetEditPreset(idx)}
                     delayLongPress={280}
                     style={({ pressed }) => [
                       styles.presetChip,
                       {
                         borderColor: active ? C.accent : C.border,
-                        backgroundColor: pressed || active ? C.accentSoft : C.ghostBg,
+                        backgroundColor: hasBg ? C.card : (pressed || active ? C.accentSoft : C.ghostBg),
+                        ...pressFx(pressed),
                       },
                     ]}
                   >
@@ -839,12 +844,9 @@ export default function TimerScreen({ navigation }) {
               ) : (
                 <View style={{ paddingVertical: 6 }}>
                   {laps.map((lap, i) => {
-                    const idx = laps.length - i; // 表示番号（古い方が小）
+                    const idx = laps.length - i;
                     return (
-                      <View
-                        key={`${lap.timeSec}-${i}`}
-                        style={[styles.lapRow, { borderColor: C.hair }]}
-                      >
+                      <View key={`${lap.timeSec}-${i}`} style={[styles.lapRow, { borderColor: C.hair }]}>
                         <Text style={[styles.lapIdx, { color: C.sub }]}>#{idx}</Text>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: C.text, fontWeight: '800' }}>{mmss(lap.timeSec)}</Text>
@@ -860,7 +862,7 @@ export default function TimerScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* iOS風ホイール・シート（大胆に中央までせり上げ、スライド演出） */}
+      {/* iOS風ホイール・シート */}
       <Modal visible={sheetVisible} transparent animationType="fade" onRequestClose={closeSheet}>
         <View style={styles.modalOverlay}>
           <Animated.View
@@ -869,7 +871,6 @@ export default function TimerScreen({ navigation }) {
               { backgroundColor: C.card, borderColor: C.border, transform: [{ translateY: slideY }], paddingBottom: Math.max(12, insets.bottom) },
             ]}
           >
-            {/* ツールバー（iOS風） */}
             <View style={[styles.toolbar, { borderColor: C.border }]}>
               <Pressable onPress={closeSheet} style={({ pressed }) => [styles.tbBtn, { opacity: pressed ? 0.6 : 1 }]}>
                 <Text style={{ color: C.sub, fontWeight: '700' }}>キャンセル</Text>
@@ -879,14 +880,13 @@ export default function TimerScreen({ navigation }) {
                 {sheetMode === 'apply' ? '時間を設定' : sheetMode === 'add' ? '新しいプリセット' : 'プリセットを編集'}
               </Text>
 
-              {/* 右上ボタン：軽いデザイン + アイコン、確定で開始 */}
               <Pressable
                 onPress={confirmSheet}
                 style={({ pressed }) => [
                   styles.tbPrimary,
                   {
                     borderColor: C.accent,
-                    backgroundColor: pressed ? C.accentSoft : 'transparent',
+                    backgroundColor: pressed ? C.accentSoft : '透明',
                   },
                 ]}
               >
@@ -897,7 +897,6 @@ export default function TimerScreen({ navigation }) {
               </Pressable>
             </View>
 
-            {/* スロット */}
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 18, paddingVertical: 8 }}>
               <View style={{ alignItems: 'center' }}>
                 <Wheel value={slotH} onChange={setSlotH} range={hours} pad={1} width={80} />
@@ -913,7 +912,6 @@ export default function TimerScreen({ navigation }) {
               </View>
             </View>
 
-            {/* 編集時のみデストラクティブ */}
             {sheetMode === 'edit' && (
               <Pressable
                 onPress={deleteEditedPreset}
@@ -960,6 +958,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     justifyContent: 'center',
+    overflow: 'hidden', // ★ ノブがはみ出さないように
   },
 
   // Big time
@@ -1006,7 +1005,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
 
-  // Preset area (countdown)
+  // Preset area
   presetWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1028,7 +1027,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
 
-  // Lap list (stopwatch)
+  // Lap list
   lapCard: {
     borderWidth: 1,
     borderRadius: 16,
@@ -1055,7 +1054,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Modal (iOS風)
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -1066,7 +1065,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     borderWidth: 1,
     paddingBottom: 12,
-    height: '80%', // ← 80%まで拡大
+    height: '80%',
   },
   toolbar: {
     flexDirection: 'row',
@@ -1081,7 +1080,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
   },
-  // 右上“軽い”ボタン（薄い背景・アクセント色文字＋アイコン）
   tbPrimary: {
     minWidth: 72,
     alignItems: 'center',

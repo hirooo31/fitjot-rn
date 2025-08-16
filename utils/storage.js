@@ -6,9 +6,12 @@ const RECORDS_KEY = 'trainingRecords';
 const WEEKLY_KEY = 'weeklyMenu';
 const MIGRATED_FLAG = 'kv_migrated_v1';
 
-// 最近セット（履歴）用
+// 最近セット（履歴）
 const RECENT_KEY = 'recentSets_v1';
 const RECENT_CAP = 20;
+
+// アプリ設定（背景画像・一覧の密度など）
+const SETTINGS_KEY = 'appSettings_v1';
 
 function getJSON(key, fallback) {
   const v = Storage.getItemSync(key);
@@ -22,6 +25,20 @@ function withIdIfMissing(r) {
 }
 function genId() {
   return `rec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// =========================
+// Settings change listeners
+// =========================
+const settingsListeners = new Set();
+function emitSettings(next) {
+  for (const l of Array.from(settingsListeners)) {
+    try { l(next); } catch {}
+  }
+}
+export function subscribeSettings(listener) {
+  settingsListeners.add(listener);
+  return () => settingsListeners.delete(listener);
 }
 
 // 最近セット用の同一判定キー
@@ -68,6 +85,10 @@ export async function migrateFromAsyncStorage() {
   } catch {}
 }
 
+/* =========================
+   記録
+   ========================= */
+
 export async function getRecords({ search } = {}) {
   const all = getJSON(RECORDS_KEY, []);
   if (!search || !search.trim()) return all;
@@ -96,6 +117,10 @@ export async function deleteRecordById(id) {
   const next = all.filter((r) => r.id !== id);
   setJSON(RECORDS_KEY, next);
 }
+
+/* =========================
+   週間メニュー
+   ========================= */
 
 export async function getWeeklyMenu() {
   return getJSON(WEEKLY_KEY, {});
@@ -139,4 +164,23 @@ export async function removeRecentSet(target) {
     const next = list.filter((x) => recentSig(x) !== sig);
     setJSON(RECENT_KEY, next);
   } catch {}
+}
+
+/* =========================
+   アプリ設定（背景画像 / コンパクト表示）
+   ========================= */
+
+export async function getSettings() {
+  return getJSON(SETTINGS_KEY, {});
+}
+export async function saveSettings(patch) {
+  const cur = getJSON(SETTINGS_KEY, {});
+  const next = { ...cur, ...patch };
+  setJSON(SETTINGS_KEY, next);
+  emitSettings(next); // ← 追加：即時通知
+}
+
+// 便利関数：背景クリア
+export async function clearBackgroundImage() {
+  await saveSettings({ backgroundImageUri: null });
 }

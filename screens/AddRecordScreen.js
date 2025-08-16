@@ -16,7 +16,14 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { saveRecord, getRecentSets, addRecentSet, removeRecentSet } from '../utils/storage';
+import {
+  saveRecord,
+  getRecentSets,
+  addRecentSet,
+  removeRecentSet,
+  getSettings,
+  subscribeSettings,
+} from '../utils/storage';
 
 // 控えめオレンジ（背景には使わない）
 const ACCENT = '#D46E2C';
@@ -60,6 +67,22 @@ export default function AddRecordScreen({ navigation }) {
       neutralBtnBgPressed: '#232323',
     },
   }[isDark ? 'dark' : 'light'];
+
+  // 背景画像の有無（設定から即時反映）
+  const [hasBg, setHasBg] = useState(false);
+  useEffect(() => {
+    let unsub = () => {};
+    (async () => {
+      try {
+        const s = await getSettings();
+        setHasBg(!!s?.backgroundImageUri);
+      } catch {}
+      unsub = subscribeSettings((next) => {
+        setHasBg(!!next?.backgroundImageUri);
+      });
+    })();
+    return () => unsub();
+  }, []);
 
   // 下端だけ最小限の余白（バー高さ 56 + セーフエリア）
   const bottomPad = insets.bottom + 56;
@@ -207,7 +230,7 @@ export default function AddRecordScreen({ navigation }) {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: C.bg }]}>
+    <View style={[styles.screen, { backgroundColor: hasBg ? 'transparent' : C.bg }]}>
       <ScrollView
         style={{ flex: 1 }}
         contentInsetAdjustmentBehavior="automatic"
@@ -282,7 +305,7 @@ export default function AddRecordScreen({ navigation }) {
                 onPress={() => removeSet(idx)}
                 style={({ pressed }) => [
                   styles.iconBtn,
-                  { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : '透明' },
+                  { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
                 ]}
               >
                 <Ionicons name="trash-outline" size={18} color={C.sub} />

@@ -1,5 +1,11 @@
 // screens/HomeScreen.js
-import React, { useState, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+} from 'react';
 import {
   View,
   Text,
@@ -10,21 +16,30 @@ import {
   TextInput,
   Alert,
   useColorScheme,
-  Platform,                // ★ 追加
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import dayjs from 'dayjs';
-import 'dayjs/locale/ja';  // ★ 追加：曜日などを日本語に
+import 'dayjs/locale/ja';
 import { Swipeable } from 'react-native-gesture-handler';
-import { getRecords, updateRecordById, deleteRecordById, saveRecord } from '../utils/storage';
+import {
+  getRecords,
+  updateRecordById,
+  deleteRecordById,
+  saveRecord,
+  getSettings,
+  saveSettings,
+  clearBackgroundImage,
+  subscribeSettings,
+} from '../utils/storage';
+import * as ImagePicker from 'expo-image-picker';
 
-dayjs.locale('ja');        // ★ 追加：この画面内は常に日本語
+dayjs.locale('ja');
 
 const ACCENT = '#D46E2C';
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
 
@@ -66,13 +81,121 @@ export default function HomeScreen() {
   const [editRecord, setEditRecord] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // 追加：表示密度・背景状態（設定からロード）
+  const [compact, setCompact] = useState(false);
+  const [hasBg, setHasBg] = useState(false);
+
   // Undo
   const [undo, setUndo] = useState(null);
   const undoTimer = useRef(null);
 
   // Swipeable 管理（同時に1つだけ開く）
   const rowRefs = useRef({});
-  const openRowRef = useRef(null);
+  const openRowRef = useRef(null); // ← 修正
+
+  // 初期設定ロード + 設定購読（即時反映）
+  useEffect(() => {
+    let unsub = () => {};
+    (async () => {
+      try {
+        const s = await getSettings();
+        setCompact(!!s?.compactList);
+        setHasBg(!!s?.backgroundImageUri);
+      } catch {}
+      unsub = subscribeSettings((next) => {
+        setHasBg(!!next?.backgroundImageUri);
+      });
+    })();
+    return () => unsub();
+  }, []);
+
+  // ヘッダー右：密度トグル & 背景操作（選択/クリア）
+  useLayoutEffect(() => {
+    navigation?.setOptions?.({
+      headerRight: () => (
+        <View style={{ flexDirection: 'row' }}>
+          {/* 密度トグル */}
+          <TouchableOpacity
+            onPress={async () => {
+              const next = !compact;
+              setCompact(next);
+              try {
+                await saveSettings({ compactList: next });
+              } catch {}
+            }}
+            style={{ paddingHorizontal: 8 }}
+          >
+            <Ionicons
+              name={compact ? 'contract' : 'expand'}
+              size={20}
+              color={C.text}
+            />
+          </TouchableOpacity>
+
+          {/* 背景：選択 or クリア */}
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                Alert.alert(
+                  '背景',
+                  '操作を選択してください',
+                  [
+                    { text: 'キャンセル', style: 'cancel' },
+                    {
+                      text: '写真から選ぶ',
+                      onPress: async () => {
+                        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                        if (perm.status !== 'granted') return;
+                        const r = await ImagePicker.launchImageLibraryAsync({
+                          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                          quality: 0.92,
+                        });
+                        if (!r.canceled && r.assets?.[0]?.uri) {
+                          await saveSettings({ backgroundImageUri: r.assets[0].uri });
+                        }
+                      },
+                    },
+                    {
+                      text: '背景をクリア',
+                      style: 'destructive',
+                      onPress: async () => {
+                        await clearBackgroundImage();
+                      },
+                    },
+                  ],
+                  { cancelable: true }
+                );
+              } catch (e) {
+                Alert.alert('エラー', '背景の設定に失敗しました');
+              }
+            }}
+            style={{ paddingHorizontal: 8 }}
+          >
+            <Ionicons name="image-outline" size={20} color={C.text} />
+          </TouchableOpacity>
+        </View>
+      ),
+    });
+  }, [navigation, compact, C.text]);
+
+  const loadRecords = useCallback(async () => {
+    try {
+      const list = await getRecords({ search: '' });
+      // 日付でグルーピング（降順）
+      const byDate = {};
+      for (const r of list) {
+        const date = r.date || r.createdAt || r.updatedAt || r._date || r.day || '未分類';
+        byDate[date] = byDate[date] || [];
+        byDate[date].push(r);
+      }
+      const sorted = Object.fromEntries(
+        Object.entries(byDate).sort(([a], [b]) => (dayjs(b).valueOf() - dayjs(a).valueOf()))
+      );
+      setGroupedRecords(sorted);
+    } catch {
+      Alert.alert('エラー', '一覧の読み込みに失敗しました');
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -83,74 +206,14 @@ export default function HomeScreen() {
           undoTimer.current = null;
         }
       };
-    }, [searchQuery])
+    }, [loadRecords, searchQuery])
   );
 
-  const loadRecords = async () => {
-    try {
-      const records = await getRecords({ search: searchQuery });
-      const grouped = {};
-      records.forEach((r) => {
-        const date = r.date || '未設定';
-        if (!grouped[date]) grouped[date] = [];
-        grouped[date].push(r);
-      });
-      Object.keys(grouped).forEach((k) => {
-        grouped[k].sort((a, b) => (a.id > b.id ? -1 : 1));
-      });
-      const sorted = Object.fromEntries(
-        Object.entries(grouped).sort(([a], [b]) => (a > b ? -1 : 1))
-      );
-      setGroupedRecords(sorted);
-    } catch {
-      Alert.alert('エラー', '記録の読み込みに失敗しました');
-    }
-  };
+  const isNum = (v) => /^\d+$/.test(String(v ?? ''));
 
-  const triggerUndo = (record) => {
-    if (undoTimer.current) clearTimeout(undoTimer.current);
-    setUndo({ record });
-    undoTimer.current = setTimeout(() => {
-      setUndo(null);
-      undoTimer.current = null;
-    }, 4000);
-  };
-
-  const undoDelete = async () => {
-    if (!undo?.record) return;
-    if (undoTimer.current) {
-      clearTimeout(undoTimer.current);
-      undoTimer.current = null;
-    }
-    const rec = undo.record;
-    setUndo(null);
-    await saveRecord(rec);
-    await loadRecords();
-  };
-
-  // ← id で確実に消す
-  const handleDeleteById = async (id) => {
-    try {
-      await deleteRecordById(id);
-      const all = Object.values(groupedRecords).flat();
-      const target = all.find((r) => r.id === id);
-      if (target) triggerUndo(target);
-      await loadRecords();
-    } catch {
-      Alert.alert('エラー', '削除に失敗しました');
-    }
-  };
-
-  const openEditModal = (record) => {
-    setEditRecord({ ...record });
+  const openEditModal = (r) => {
+    setEditRecord({ ...r });
     setEditModalVisible(true);
-  };
-
-  const isNum = (v) => /^\d+$/.test((v ?? '').toString());
-  const onDateChange = (_event, selectedDate) => {
-    if (selectedDate) {
-      setEditRecord((p) => ({ ...p, date: dayjs(selectedDate).format('YYYY-MM-DD') }));
-    }
   };
 
   const handleSaveEdit = async () => {
@@ -183,10 +246,36 @@ export default function HomeScreen() {
     }
   };
 
+  const handleDeleteById = async (id) => {
+    try {
+      const all = await getRecords();
+      const target = all.find((x) => x.id === id);
+      await deleteRecordById(id);
+      setUndo({ id, target });
+      loadRecords();
+
+      if (undoTimer.current) clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => setUndo(null), 4500);
+    } catch {
+      Alert.alert('エラー', '削除に失敗しました');
+    }
+  };
+
+  const undoDelete = async () => {
+    if (!undo?.target) return;
+    try {
+      await saveRecord(undo.target);
+      setUndo(null);
+      loadRecords();
+    } catch {}
+  };
+
   const clearSearch = () => setSearchQuery('');
 
   const filteredEntries = Object.entries(groupedRecords).filter(([_, records]) =>
-    records.some((r) => (r.exercise || '').toLowerCase().includes(searchQuery.toLowerCase()))
+    records.some((r) =>
+      (r.exercise || '').toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
   const subVerbose = (r) => {
@@ -205,14 +294,14 @@ export default function HomeScreen() {
   };
 
   const RightAction = () => (
-    <View style={[styles.swipeBG, { backgroundColor: C.bg }]}>
+    <View style={[styles.swipeBG, { backgroundColor: hasBg ? 'transparent' : C.bg }]}>
       <Ionicons name="trash-outline" size={20} color={C.black} />
       <Text style={[styles.swipeActionText, { color: C.black }]}>削除</Text>
     </View>
   );
 
   return (
-    <View style={[styles.screen, { backgroundColor: C.bg }]}>
+    <View style={[styles.screen, { backgroundColor: hasBg ? 'transparent' : C.bg }]}>
       {/* Search row */}
       <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 }}>
         <View style={{ position: 'relative' }}>
@@ -258,7 +347,7 @@ export default function HomeScreen() {
                 </View>
 
                 {items.map((r) => (
-                  <View key={r.id} style={styles.rowWrap}>
+                  <View key={r.id} style={[styles.rowWrap, compact && { marginTop: 8 }]}>
                     <Swipeable
                       ref={(ref) => {
                         if (ref) rowRefs.current[r.id] = ref;
@@ -283,20 +372,21 @@ export default function HomeScreen() {
                       <View
                         style={[
                           styles.card,
-                          styles.cardRegular,
+                          compact ? styles.cardCompact : styles.cardRegular,
                           { backgroundColor: C.card, borderColor: C.border, shadowColor: C.shadow },
                         ]}
                       >
-                        <View style={styles.leftIconWrap}>
+                        <View style={[styles.leftIconWrap, compact && styles.leftIconWrapCompact]}>
                           <View
                             style={[
                               styles.iconCircle,
+                              compact && styles.iconCircleCompact,
                               { borderColor: C.border, backgroundColor: C.ghostBg },
                             ]}
                           >
                             <Ionicons
                               name={r.type === '筋トレ' ? 'barbell-outline' : 'walk-outline'}
-                              size={18}
+                              size={compact ? 16 : 18}
                               color={C.accent}
                             />
                           </View>
@@ -304,7 +394,7 @@ export default function HomeScreen() {
 
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text
-                            style={[styles.itemTitle, { color: C.text }]}
+                            style={[styles.itemTitle, compact && styles.itemTitleCompact, { color: C.text }]}
                             numberOfLines={1}
                             ellipsizeMode="tail"
                           >
@@ -312,7 +402,7 @@ export default function HomeScreen() {
                           </Text>
                           {!!subVerbose(r) && (
                             <Text
-                              style={[styles.itemSub, { color: C.sub }]}
+                              style={[styles.itemSub, compact && styles.itemSubCompact, { color: C.sub }]}
                               numberOfLines={1}
                               ellipsizeMode="tail"
                             >
@@ -321,16 +411,24 @@ export default function HomeScreen() {
                           )}
                         </View>
 
-                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <View style={{ flexDirection: 'row', gap: compact ? 4 : 8 }}>
                           <TouchableOpacity
                             onPress={() => openEditModal(r)}
-                            style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
+                            style={[
+                              styles.iconBtn,
+                              compact && styles.iconBtnCompact,
+                              { borderColor: C.border, backgroundColor: C.ghostBg },
+                            ]}
                           >
                             <Ionicons name="create-outline" size={18} color={C.black} />
                           </TouchableOpacity>
                           <TouchableOpacity
                             onPress={() => handleDeleteById(r.id)}
-                            style={[styles.iconBtn, { borderColor: C.border, backgroundColor: C.ghostBg }]}
+                            style={[
+                              styles.iconBtn,
+                              compact && styles.iconBtnCompact,
+                              { borderColor: C.border, backgroundColor: C.ghostBg },
+                            ]}
                           >
                             <Ionicons name="trash-outline" size={18} color={C.black} />
                           </TouchableOpacity>
@@ -344,161 +442,6 @@ export default function HomeScreen() {
           })
         )}
       </ScrollView>
-
-      {/* 編集モーダル */}
-      <Modal
-        visible={editModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
-            <Text style={[styles.modalTitle, { color: C.text }]}>記録を編集</Text>
-
-            {/* ★ ラベルを行にしてカレンダーアイコン（オレンジ）を追加 */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <Ionicons name="calendar-outline" size={18} color={C.accent} />
-              <Text style={{ color: C.sub, fontWeight: '700' }}>日付を選択</Text>
-            </View>
-
-            <DateTimePicker
-              value={editRecord?.date ? new Date(editRecord.date) : new Date()}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}   // ★ iOS:スピナー / Android:カレンダー
-              locale={Platform.OS === 'ios' ? 'ja-JP' : undefined}       // ★ iOSのみ日本語を強制
-              {...(Platform.OS === 'android'
-                ? { positiveButton: { label: '決定' }, negativeButton: { label: 'キャンセル' } }
-                : {})}                                                   // ★ Androidのボタン文言を日本語に
-              onChange={onDateChange}
-              style={{ marginBottom: 12, alignSelf: 'center' }}
-            />
-
-            <View style={styles.formGrid}>
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: C.sub }]}>種目</Text>
-                <TextInput
-                  placeholder="例: ベンチプレス / ランニング"
-                  placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                  value={editRecord?.exercise ?? ''}
-                  onChangeText={(v) => setEditRecord((p) => ({ ...p, exercise: v }))}
-                  style={[
-                    styles.input,
-                    { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                  ]}
-                  returnKeyType="done"
-                />
-              </View>
-
-              {editRecord?.type === '有酸素' ? (
-                <>
-                  <View style={styles.field}>
-                    <Text style={[styles.label, { color: C.sub }]}>距離(km)</Text>
-                    <TextInput
-                      placeholder="5"
-                      keyboardType="numeric"
-                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                      value={editRecord?.distance ?? ''}
-                      onChangeText={(v) => /^\d*$/.test(v) && setEditRecord((p) => ({ ...p, distance: v }))}
-                      style={[
-                        styles.input,
-                        { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                      ]}
-                      returnKeyType="done"
-                    />
-                  </View>
-                  <View style={styles.field}>
-                    <Text style={[styles.label, { color: C.sub }]}>時間(分)</Text>
-                    <TextInput
-                      placeholder="30"
-                      keyboardType="numeric"
-                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                      value={editRecord?.time ?? ''}
-                      onChangeText={(v) => /^\d*$/.test(v) && setEditRecord((p) => ({ ...p, time: v }))}
-                      style={[
-                        styles.input,
-                        { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                      ]}
-                      returnKeyType="done"
-                    />
-                  </View>
-                </>
-              ) : (
-                <>
-                  <View style={styles.field}>
-                    <Text style={[styles.label, { color: C.sub }]}>重さ(kg)</Text>
-                    <TextInput
-                      placeholder="60"
-                      keyboardType="numeric"
-                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                      value={editRecord?.weight ?? ''}
-                      onChangeText={(v) => /^\d*$/.test(v) && setEditRecord((p) => ({ ...p, weight: v }))}
-                      style={[
-                        styles.input,
-                        { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                      ]}
-                      returnKeyType="done"
-                    />
-                  </View>
-                  <View style={styles.field}>
-                    <Text style={[styles.label, { color: C.sub }]}>回数</Text>
-                    <TextInput
-                      placeholder="10"
-                      keyboardType="numeric"
-                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                      value={editRecord?.reps ?? ''}
-                      onChangeText={(v) => /^\d*$/.test(v) && setEditRecord((p) => ({ ...p, reps: v }))}
-                      style={[
-                        styles.input,
-                        { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                      ]}
-                      returnKeyType="done"
-                    />
-                  </View>
-                </>
-              )}
-
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: C.sub }]}>セット数</Text>
-                <TextInput
-                  placeholder="3"
-                  keyboardType="numeric"
-                  placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
-                  value={editRecord?.sets ?? ''}
-                  onChangeText={(v) => /^\d*$/.test(v) && setEditRecord((p) => ({ ...p, sets: v }))}
-                  style={[
-                    styles.input,
-                    { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text },
-                  ]}
-                  returnKeyType="done"
-                />
-              </View>
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
-              <TouchableOpacity
-                onPress={() => setEditModalVisible(false)}
-                style={[
-                  styles.ghostBtn,
-                  { borderColor: C.border, backgroundColor: C.ghostBg },
-                ]}
-              >
-                <Text style={{ color: C.sub }}>キャンセル</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleSaveEdit}
-                style={[
-                  styles.primaryBtn,
-                  { borderColor: C.border, backgroundColor: isDark ? '#1b1b1b' : '#f2f2f2', shadowColor: C.shadow },
-                ]}
-              >
-                <Ionicons name="save-outline" size={18} color={C.accent} />
-                <Text style={[styles.primaryBtnText, { color: C.text }]}>保存</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {undo && (
         <View
@@ -515,6 +458,117 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* 編集モーダル */}
+      <Modal
+        visible={editModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Text style={[styles.modalTitle, { color: C.text }]}>編集</Text>
+
+            <View style={styles.formGrid}>
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: C.sub }]}>種目</Text>
+                <TextInput
+                  placeholder="ベンチプレス"
+                  placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                  value={editRecord?.exercise ?? ''}
+                  onChangeText={(v) => setEditRecord((p) => ({ ...p, exercise: v }))}
+                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                />
+              </View>
+
+              {editRecord?.type === '筋トレ' ? (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: C.sub }]}>重さ(kg)</Text>
+                    <TextInput
+                      placeholder="60"
+                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                      value={String(editRecord?.weight ?? '')}
+                      onChangeText={(v) => setEditRecord((p) => ({ ...p, weight: v }))}
+                      keyboardType="numeric"
+                      style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    />
+                  </View>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: C.sub }]}>回数</Text>
+                    <TextInput
+                      placeholder="10"
+                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                      value={String(editRecord?.reps ?? '')}
+                      onChangeText={(v) => setEditRecord((p) => ({ ...p, reps: v }))}
+                      keyboardType="numeric"
+                      style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    />
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: C.sub }]}>距離(km)</Text>
+                    <TextInput
+                      placeholder="5"
+                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                      value={String(editRecord?.distance ?? '')}
+                      onChangeText={(v) => setEditRecord((p) => ({ ...p, distance: v }))}
+                      keyboardType="numeric"
+                      style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    />
+                  </View>
+                  <View style={styles.field}>
+                    <Text style={[styles.label, { color: C.sub }]}>時間(分)</Text>
+                    <TextInput
+                      placeholder="30"
+                      placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                      value={String(editRecord?.time ?? '')}
+                      onChangeText={(v) => setEditRecord((p) => ({ ...p, time: v }))}
+                      keyboardType="numeric"
+                      style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    />
+                  </View>
+                </>
+              )}
+
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: C.sub }]}>セット数</Text>
+                <TextInput
+                  placeholder="3"
+                  placeholderTextColor={isDark ? '#777' : '#9a9a9a'}
+                  value={String(editRecord?.sets ?? '')}
+                  onChangeText={(v) => setEditRecord((p) => ({ ...p, sets: v }))}
+                  keyboardType="numeric"
+                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity
+                onPress={() => setEditModalVisible(false)}
+                style={[styles.ghostBtn, { borderColor: C.border }]}
+              >
+                <Ionicons name="close" size={18} color={C.sub} />
+                <Text style={{ color: C.sub }}>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveEdit}
+                style={[
+                  styles.primaryBtn,
+                  { borderColor: C.border, backgroundColor: C.ghostBg, shadowColor: C.shadow },
+                ]}
+              >
+                <Ionicons name="save-outline" size={18} color={ACCENT} />
+                <Text style={[styles.primaryBtnText, { color: C.text }]}>保存</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -545,10 +599,8 @@ const styles = StyleSheet.create({
   sectionHeader: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   sectionTitle: { fontSize: 13, fontWeight: '700' },
 
-  // 行の外側に余白を出す（Swipeable と背景のズレ防止）
   rowWrap: { marginHorizontal: 16, marginTop: 10 },
 
-  // Record card（← margin は外の rowWrap に移動）
   card: {
     borderWidth: 1,
     borderRadius: 14,
@@ -561,8 +613,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardRegular: { padding: 14 },
+  cardCompact: { paddingVertical: 8, paddingHorizontal: 10 },
 
   leftIconWrap: { alignItems: 'center', gap: 6 },
+  leftIconWrapCompact: { gap: 4 },
   iconCircle: {
     width: 28,
     height: 28,
@@ -571,13 +625,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconCircleCompact: { width: 24, height: 24, borderRadius: 12 },
 
   itemTitle: { fontSize: 16, fontWeight: '700' },
+  itemTitleCompact: { fontSize: 14 },
   itemSub: { marginTop: 2, fontSize: 13 },
+  itemSubCompact: { fontSize: 12, marginTop: 1 },
 
   iconBtn: { borderWidth: 1, borderRadius: 12, padding: 8 },
+  iconBtnCompact: { padding: 6, borderRadius: 10 },
 
-  // Swipe visual background（背景色＝画面背景／高さは行にフィット）
   swipeBG: {
     width: 90,
     height: '100%',
@@ -589,7 +646,6 @@ const styles = StyleSheet.create({
   },
   swipeActionText: { fontSize: 12, fontWeight: '700' },
 
-  // Buttons (modal footer)
   primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -615,7 +671,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
 
-  // Modal
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -625,39 +680,12 @@ const styles = StyleSheet.create({
   modalCard: { width: '94%', borderWidth: 1, borderRadius: 20, padding: 16 },
   modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
 
-  // Modal form
   formGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 },
   field: { width: '48%' },
   label: { fontSize: 14, marginBottom: 6 },
   input: { borderWidth: 1, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 12, fontSize: 16 },
 
-  // Empty state
   emptyWrap: { alignItems: 'center', paddingTop: 64, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: '700' },
   emptyText: { fontSize: 13 },
-
-  // Undo bar
-  undoBar: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  undoBtn: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
 });

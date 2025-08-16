@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getWeeklyMenu, saveWeeklyMenu, saveRecord } from '../utils/storage';
+import { getWeeklyMenu, saveWeeklyMenu, saveRecord, getSettings } from '../utils/storage';
 
 const weekdays = ['月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日', '日曜日'];
 
@@ -81,6 +81,20 @@ export default function WeeklyMenuScreen({ navigation }) {
 
   // 下余白は常に一定（キーボード有無によらず 56px + セーフエリア）
   const bottomPad = insets.bottom + 56;
+
+  // 背景画像の有無（設定から取得・画面フォーカスで再読込）
+  const [hasBg, setHasBg] = useState(false);
+  useEffect(() => {
+    const loadBg = async () => {
+      try {
+        const s = await getSettings();
+        setHasBg(!!s?.backgroundImageUri);
+      } catch {}
+    };
+    loadBg();
+    const unsub = navigation.addListener('focus', loadBg);
+    return unsub;
+  }, [navigation]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -224,7 +238,7 @@ export default function WeeklyMenuScreen({ navigation }) {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: C.bg }]}>
+    <View style={[styles.screen, { backgroundColor: hasBg ? 'transparent' : C.bg }]}>
       <ScrollView
         style={{ flex: 1 }}
         contentInsetAdjustmentBehavior="automatic"
@@ -325,7 +339,7 @@ export default function WeeklyMenuScreen({ navigation }) {
 
                   {set.type === '筋トレ' ? (
                     <>
-                      <View style={styles.field}>
+                      <View className="field" style={styles.field}>
                         <Text style={[styles.label, { color: C.sub }]}>重さ(kg)</Text>
                         <TextInput
                           placeholder="60"
@@ -466,7 +480,7 @@ export default function WeeklyMenuScreen({ navigation }) {
               onPress={() => setWeekdayModal(false)}
               style={({ pressed }) => [
                 styles.closeBtn,
-                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : '透明' },
+                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
               ]}
             >
               <Text style={{ color: C.text, fontSize: 16, fontWeight: '600' }}>閉じる</Text>
@@ -516,7 +530,7 @@ export default function WeeklyMenuScreen({ navigation }) {
               onPress={() => setTypeModal(false)}
               style={({ pressed }) => [
                 styles.closeBtn,
-                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : '透明' },
+                { borderColor: C.border, backgroundColor: pressed ? C.ghostBg : 'transparent' },
               ]}
             >
               <Text style={{ color: C.text, fontSize: 16, fontWeight: '600' }}>閉じる</Text>
